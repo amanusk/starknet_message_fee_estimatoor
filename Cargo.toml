@@ -1,0 +1,57 @@
+[package]
+name = "estimate_starknet_message_fee"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+alloy = { version = "1.0.20", features = [
+    "json-rpc",
+    "full",
+    "eips",
+    "rpc-client",
+    "rpc-types-mev",
+    "node-bindings",
+    "json-rpc",
+    "network",
+    "providers",
+    "transports",
+    "transport-http",
+    "transport-ws",
+    "signer-mnemonic"
+] }
+
+# JSON-RPC server
+jsonrpsee = { version = "0.21", features = ["server", "macros"] }
+
+# HTTP and async
+axum = "0.7"
+tokio = { version = "1.28", features = ["macros", "rt-multi-thread", "signal"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Configuration
+config = "0.14"
+serde = { version = "1.0.124", features = ["derive"] }
+serde_json = "1.0.64"
+
+# Error handling
+eyre = "0.6"
+anyhow = "1.0"
+
+# Misc
+bytes = "1.4.0"
+envfile = "0.2.1"
+rand = "0.8.5"
+
+# Logging
+log = "0.4"
+env_logger = "0.10"
+flexi_logger = "0.27"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
