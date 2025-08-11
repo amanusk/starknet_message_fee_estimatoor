@@ -1,9 +1,9 @@
 use crate::simulator::{NetworkConfig, TransactionData, TransactionSimulator};
+use eyre::{eyre, Result};
 use jsonrpsee::server::ServerBuilder;
 use jsonrpsee::RpcModule;
 use std::net::SocketAddr;
 use tracing::{error, info};
-use eyre::{Result, eyre};
 
 pub struct RpcServer {
     simulator: TransactionSimulator,
@@ -132,9 +132,7 @@ impl RpcServer {
 }
 
 /// Parse transaction parameters from JSON-RPC params
-fn parse_transaction_params(
-    params: jsonrpsee::types::Params,
-) -> Result<TransactionData> {
+fn parse_transaction_params(params: jsonrpsee::types::Params) -> Result<TransactionData> {
     // TODO: Implement proper parameter parsing based on your RPC interface specification
     // This is a placeholder implementation that expects specific parameter structure
 
@@ -143,13 +141,13 @@ fn parse_transaction_params(
     // Try to extract transaction data from params
     // This assumes params is either an array with transaction object or a single transaction object
     let tx_data = if params_value.is_array() {
-            params_value
-                .as_array()
-                .and_then(|arr| arr.first())
-                .ok_or_else(|| eyre!("Missing transaction data in parameters"))?
-        } else {
-            &params_value
-        };
+        params_value
+            .as_array()
+            .and_then(|arr| arr.first())
+            .ok_or_else(|| eyre!("Missing transaction data in parameters"))?
+    } else {
+        &params_value
+    };
 
     // Extract fields with defaults for missing values
     let from = tx_data

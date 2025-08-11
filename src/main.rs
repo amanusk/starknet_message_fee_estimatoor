@@ -3,9 +3,9 @@ mod server;
 mod simulator;
 
 use config::Settings;
+use eyre::Result;
 use server::RpcServer;
 use tracing::{error, info};
-use eyre::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {

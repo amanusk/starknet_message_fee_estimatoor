@@ -49,6 +49,7 @@ pub struct TransactionData {
 #[derive(Debug)]
 pub struct TransactionSimulator {
     // Configuration and state will be added here
+    #[allow(dead_code)]
     network_config: NetworkConfig,
 }
 
@@ -60,6 +61,7 @@ sol!(
 );
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
 pub struct TransferEvent {
     pub token_address: Address,
     pub from: Address,
@@ -67,6 +69,7 @@ pub struct TransferEvent {
     pub value: U256,
 }
 
+#[allow(dead_code)]
 pub async fn simulate_tx(rpc_url: &str, target_tx: &TxEnvelope) -> Result<u64, ErrReport> {
     let anvil = Anvil::new()
         .arg("--fork-url")
@@ -136,8 +139,11 @@ fn print_transaction_events(receipt: &alloy::rpc::types::TransactionReceipt) {
 
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {
+    #[allow(dead_code)]
     pub l1_rpc_url: String,
+    #[allow(dead_code)]
     pub l2_rpc_url: String,
+    #[allow(dead_code)]
     pub block_number: Option<u64>,
 }
 
@@ -240,11 +246,13 @@ impl TransactionSimulator {
     }
 
     /// Get current network configuration
+    #[allow(dead_code)]
     pub fn get_network_config(&self) -> &NetworkConfig {
         &self.network_config
     }
 
     /// Update network configuration
+    #[allow(dead_code)]
     pub fn update_network_config(&mut self, config: NetworkConfig) -> Result<()> {
         info!("Updating network configuration: {:?}", config);
 
@@ -274,7 +282,7 @@ mod tests {
         eips::eip2930::AccessList,
         eips::{eip1559::BaseFeeParams, BlockId},
         network::TxSignerSync,
-        primitives::{hex, utils::parse_ether, TxKind, b256, address, Signature},
+        primitives::{address, b256, hex, utils::parse_ether, Signature, TxKind},
         signers::local::PrivateKeySigner,
     };
 
@@ -337,7 +345,7 @@ mod tests {
         let alice_nonce = provider.get_transaction_count(alice).await.unwrap();
 
         let mut funding_tx = TxEip1559 {
-            chain_id: chain_id,
+            chain_id,
             nonce: alice_nonce,
             gas_limit: 21000,
             max_fee_per_gas: fee_u128,
@@ -421,13 +429,13 @@ mod tests {
 
         // Address parameter (32 bytes): 12 bytes padding + 20 bytes address
         contract_data.extend_from_slice(&[0u8; 12]); // padding for address
-        contract_data.extend_from_slice(&bob.as_slice()); // bob's address (20 bytes)
+        contract_data.extend_from_slice(bob.as_slice()); // bob's address (20 bytes)
 
         // U256 parameter (32 bytes): amount in big-endian format
         contract_data.extend_from_slice(&transfer_amount.to_be_bytes::<32>()); // amount
 
         let mut contract_tx = TxEip1559 {
-            chain_id: chain_id,
+            chain_id,
             nonce: alice_nonce,
             gas_limit: 100000, // Higher gas limit for contract interaction
             max_fee_per_gas: fee_u128,
@@ -475,21 +483,21 @@ mod tests {
             .unwrap();
         let provider = ProviderBuilder::new().connect_http(anvil.endpoint_url());
 
-        let chain_id = provider.get_chain_id().await.unwrap();
+        let _chain_id = provider.get_chain_id().await.unwrap();
         let block_number = provider.get_block_number().await.unwrap();
         println!("Block number: {}", block_number);
 
         // tx to simulate https://etherscan.io/tx/0xd5fdee26751ba7175444cb587c1b1ddeca3a0d22cbf87bf0c1d6b4d263c6a699
 
-        let mut contract_tx = TxEip1559 {
+        let contract_tx = TxEip1559 {
             chain_id: 1,
             nonce: 58,
-            gas_limit: 190_674 , 
+            gas_limit: 190_674,
             max_fee_per_gas: 2306574200,
             max_priority_fee_per_gas: 2000000000,
             input: hex!("0x0efe6a8b000000000000000000000000ca14007eff0db1f8135f4c25b34de49ab0d42766000000000000000000000000000000000000000000004f9c6a3ec958b0de0000013cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1").into(),
             to: TxKind::Call(address!("0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4")),
-            value: U256::from(25344429452040_u128), 
+            value: U256::from(25344429452040_u128),
             access_list: AccessList::default(),
         };
 
@@ -498,7 +506,6 @@ mod tests {
             b256!("1040aa1cf5035f0a6f757f79c9defba2819a9626a472b37d45ce5ceb9e4a0af9"),
             true,
         );
-    
 
         let contract_tx_envelope = TxEnvelope::new_unhashed(contract_tx.into(), signature);
 
@@ -506,12 +513,12 @@ mod tests {
         let rpc_url = anvil.endpoint_url();
 
         // Test the simulate_tx function with contract interaction
-        let (gas_used, receipt) = simulate_tx_with_receipt(rpc_url.as_str(), &contract_tx_envelope)
-            .await
-            .unwrap();
+        let (_gas_used, receipt) =
+            simulate_tx_with_receipt(rpc_url.as_str(), &contract_tx_envelope)
+                .await
+                .unwrap();
 
         // Print all events emitted by the transaction
         print_transaction_events(&receipt);
-
     }
 }
