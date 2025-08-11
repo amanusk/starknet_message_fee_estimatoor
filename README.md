@@ -136,7 +136,19 @@ curl -X POST -H "Content-Type: application/json" \
 - **Minimal main function**: Lean startup with configuration loading and server initialization
 - **JSON-RPC interface**: Standard JSON-RPC 2.0 protocol for client communication
 - **Configuration management**: Environment-based configuration for endpoints
+- **Transaction Simulator**: Modular simulator for Ethereum transaction processing and fee estimation
 - **Modular structure**: Organized code structure for future expansion
+
+### Simulator Module
+
+The transaction simulator (`src/simulator/`) provides:
+
+- **Transaction Simulation**: Execute Ethereum transactions in a controlled environment
+- **Fee Estimation**: Calculate gas costs and predict Starknet operation fees
+- **Event Extraction**: Parse transaction logs and extract relevant events
+- **Error Handling**: Comprehensive error types for different failure scenarios
+
+The simulator is designed with placeholder implementations that can be filled in with the actual logic.
 
 ## Next Steps
 

@@ -1,12 +1,14 @@
 mod config;
 mod server;
+mod simulator;
 
 use config::Settings;
 use server::RpcServer;
 use tracing::{error, info};
+use eyre::Result;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt::init();
 
@@ -18,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = settings.server_addr()?;
 
     // Create and start RPC server
-    let rpc_server = RpcServer::new();
+    let rpc_server = RpcServer::new()?;
 
     info!("Starting server on {}", addr);
 

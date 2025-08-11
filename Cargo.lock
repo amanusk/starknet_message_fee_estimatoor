@@ -1811,6 +1811,7 @@ dependencies = [
  "envfile",
  "eyre",
  "flexi_logger",
+ "hex",
  "jsonrpsee",
  "log",
  "rand 0.8.5",
