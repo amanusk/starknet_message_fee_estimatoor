@@ -194,6 +194,7 @@ impl StarknetFeeEstimator {
 mod tests {
     use super::*;
     use starknet::core::types::Felt;
+    use starknet::providers::Url;
 
     #[test]
     fn test_fee_estimator_creation() {
@@ -248,6 +249,13 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_estimate_single_message_fee() {
+        let estimator =
+            StarknetFeeEstimator::from_url("https://starknet-mainnet.public.blastapi.io/rpc/v0_8")
+                .unwrap();
+    }
+
+    #[tokio::test]
     async fn test_single_message_fee_estimation() {
         use starknet::core::types::{EthAddress, Felt};
         use std::str::FromStr;
@@ -277,49 +285,28 @@ mod tests {
 
         // Create fee estimator with Starknet mainnet endpoint
         let estimator =
-            StarknetFeeEstimator::from_url("https://starknet-mainnet.public.blastapi.io").unwrap();
+            StarknetFeeEstimator::from_url("https://starknet-mainnet.public.blastapi.io/rpc/v0_8")
+                .unwrap();
 
         // Estimate fee for the single message
         let result = estimator.estimate_single_message_fee(&test_event).await;
 
-        // The test might fail if the endpoint is unreachable or if the message is invalid
-        // For a proper unit test environment, you might want to mock the RPC client
-        match result {
-            Ok(estimate) => {
-                // Verify that the estimate contains expected fields
-                assert_eq!(estimate.l2_address, test_event.l2_address);
-                assert_eq!(estimate.selector, test_event.selector);
-                assert!(
-                    estimate.gas_consumed > 0,
-                    "Gas consumed should be greater than 0"
-                );
-                assert!(estimate.gas_price > 0, "Gas price should be greater than 0");
-                assert!(
-                    estimate.overall_fee > 0,
-                    "Overall fee should be greater than 0"
-                );
-                assert!(!estimate.unit.is_empty(), "Unit should not be empty");
-
-                println!("✓ Single message fee estimation successful:");
-                println!("  Gas consumed: {}", estimate.gas_consumed);
-                println!("  Gas price: {}", estimate.gas_price);
-                println!("  Overall fee: {} {}", estimate.overall_fee, estimate.unit);
-            }
-            Err(e) => {
-                // This is expected in CI environments or when the endpoint is unreachable
-                println!(
-                    "⚠ Fee estimation failed (this is expected in test environments): {}",
-                    e
-                );
-
-                // We can still verify that the error handling works correctly
-                assert!(
-                    e.to_string().contains("Failed to estimate message fee")
-                        || e.to_string().contains("Invalid RPC URL")
-                        || e.to_string().contains("connection")
-                        || e.to_string().contains("network")
-                );
-            }
-        }
+        assert!(
+            result.is_ok(),
+            "Fee estimation should succeed for a valid message"
+        );
+        let estimate = result.unwrap();
+        assert_eq!(estimate.l2_address, test_event.l2_address);
+        assert_eq!(estimate.selector, test_event.selector);
+        assert!(
+            estimate.gas_consumed > 0,
+            "Gas consumed should be greater than 0"
+        );
+        assert!(estimate.gas_price > 0, "Gas price should be greater than 0");
+        assert!(
+            estimate.overall_fee > 0,
+            "Overall fee should be greater than 0"
+        );
+        assert!(!estimate.unit.is_empty(), "Unit should not be empty");
     }
 }

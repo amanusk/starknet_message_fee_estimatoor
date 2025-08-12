@@ -602,7 +602,7 @@ mod tests {
         let event = &l1_to_l2_logs[0];
 
         let expected_from_address =
-            EthAddress::from_str("0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4").unwrap();
+            EthAddress::from_hex("0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4").unwrap();
 
         // Expected values based on the actual decoded event output
         // to_address: Convert from decimal output we see: 2524392021852001135582825949054576525094493216367559068627275826195272239197
