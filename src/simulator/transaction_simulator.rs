@@ -8,7 +8,7 @@ use alloy::{
     consensus::TxEnvelope,
     eips::Encodable2718,
     node_bindings::Anvil,
-    primitives::{address, Address, U256},
+    primitives::U256,
     providers::{Provider, ProviderBuilder},
     sol,
     sol_types::SolEvent,
@@ -565,6 +565,80 @@ mod tests {
             println!("    to_address: {}", log.l2_address);
             println!("    selector: {}", log.selector);
             println!("    payload: {:?}", log.payload);
+        }
+
+        // Assertions for the test
+        // This specific transaction should emit exactly 1 L1ToL2MessageSent event
+        assert_eq!(
+            l1_to_l2_logs.len(),
+            1,
+            "Expected exactly 1 L1ToL2MessageSent event, but found {}",
+            l1_to_l2_logs.len()
+        );
+
+        let event = &l1_to_l2_logs[0];
+
+        // Expected values based on the actual decoded event output
+        // to_address: Convert from decimal output we see: 2524392021852001135582825949054576525094493216367559068627275826195272239197
+        let expected_to_address = Felt::from_str(
+            "2524392021852001135582825949054576525094493216367559068627275826195272239197",
+        )
+        .unwrap();
+        // selector: Convert from decimal output we see: 774397379524139446221206168840917193112228400237242521560346153613428128537
+        let expected_selector = Felt::from_str(
+            "774397379524139446221206168840917193112228400237242521560346153613428128537",
+        )
+        .unwrap();
+
+        // Assert the to_address matches expected value
+        assert_eq!(
+            event.l2_address, expected_to_address,
+            "L2 address mismatch. Expected: {}, Got: {}",
+            expected_to_address, event.l2_address
+        );
+
+        // Assert the selector matches expected value
+        assert_eq!(
+            event.selector, expected_selector,
+            "Selector mismatch. Expected: {}, Got: {}",
+            expected_selector, event.selector
+        );
+
+        // Assert that payload is not empty and has expected structure
+        assert!(
+            !event.payload.is_empty(),
+            "Expected non-empty payload, but payload was empty"
+        );
+
+        // The payload should contain exactly 5 elements based on the output
+        assert_eq!(
+            event.payload.len(),
+            5,
+            "Expected payload to have 5 elements, but found {}",
+            event.payload.len()
+        );
+
+        // Assert specific payload values from the decoded output
+        let expected_payload = vec![
+            Felt::from_str("0xca14007eff0db1f8135f4c25b34de49ab0d42766").unwrap(), // First payload element
+            Felt::from_str("0x11dd734a52cd2ee23ffe8b5054f5a8ecf5d1ad50").unwrap(), // Second payload element
+            Felt::from_str("0x13cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1")
+                .unwrap(), // Third payload element
+            Felt::from_str("0x4f9c6a3ec958b0de0000").unwrap(), // Fourth payload element
+            Felt::ZERO,                                        // Fifth payload element (0x0)
+        ];
+
+        for (i, (actual, expected)) in event
+            .payload
+            .iter()
+            .zip(expected_payload.iter())
+            .enumerate()
+        {
+            assert_eq!(
+                actual, expected,
+                "Payload element {} mismatch. Expected: {}, Got: {}",
+                i, expected, actual
+            );
         }
     }
 }
