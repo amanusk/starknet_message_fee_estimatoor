@@ -25,6 +25,8 @@ alloy = { version = "1.0.20", features = [
 # JSON-RPC server
 jsonrpsee = { version = "0.21", features = ["server", "macros"] }
 
+starknet = "0.16.0"
+
 # HTTP and async
 axum = "0.7"
 tokio = { version = "1.28", features = ["macros", "rt-multi-thread", "signal"] }
