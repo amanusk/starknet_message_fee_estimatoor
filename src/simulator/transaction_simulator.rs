@@ -171,7 +171,6 @@ pub fn print_transaction_events(receipt: &alloy::rpc::types::TransactionReceipt)
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {
     pub l1_rpc_url: String,
-    pub l2_rpc_url: String,
     pub block_number: Option<u64>,
 }
 
@@ -302,7 +301,6 @@ impl Default for NetworkConfig {
     fn default() -> Self {
         Self {
             l1_rpc_url: "http://localhost:8545".to_string(),
-            l2_rpc_url: "http://localhost:5050".to_string(),
             block_number: None,
         }
     }
@@ -400,7 +398,6 @@ mod tests {
         // Create a TransactionSimulator with the Anvil endpoint
         let config = NetworkConfig {
             l1_rpc_url: anvil.endpoint_url().to_string(),
-            l2_rpc_url: "http://localhost:5050".to_string(),
             block_number: None,
         };
         let simulator = TransactionSimulator::new(config).unwrap();
@@ -499,7 +496,7 @@ mod tests {
         // Create a TransactionSimulator with the Anvil endpoint
         let config = NetworkConfig {
             l1_rpc_url: rpc_url.to_string(),
-            l2_rpc_url: "http://localhost:5050".to_string(),
+
             block_number: None,
         };
         let simulator = TransactionSimulator::new(config).unwrap();
@@ -564,7 +561,7 @@ mod tests {
         // Create a TransactionSimulator with the Anvil endpoint
         let config = NetworkConfig {
             l1_rpc_url: rpc_url.to_string(),
-            l2_rpc_url: "http://localhost:5050".to_string(),
+
             block_number: None,
         };
         let simulator = TransactionSimulator::new(config).unwrap();

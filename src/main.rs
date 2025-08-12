@@ -1,4 +1,5 @@
 mod config;
+mod fee_estimator;
 mod server;
 mod simulator;
 
@@ -19,8 +20,11 @@ async fn main() -> Result<()> {
     // Get server address
     let addr = settings.server_addr()?;
 
-    // Create and start RPC server
-    let rpc_server = RpcServer::new()?;
+    // Create and start RPC server with configuration
+    let rpc_server = RpcServer::new_with_config(
+        settings.ethereum.endpoint.clone(),
+        settings.starknet.endpoint.clone(),
+    )?;
 
     info!("Starting server on {}", addr);
 
