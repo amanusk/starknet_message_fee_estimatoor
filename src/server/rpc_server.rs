@@ -282,7 +282,7 @@ fn parse_transaction_params(params: jsonrpsee::types::Params) -> Result<Transact
 fn parse_l1_to_l2_message_params(
     params: jsonrpsee::types::Params,
 ) -> Result<Vec<L1ToL2MessageSentEvent>> {
-    use starknet::core::types::Felt;
+    use starknet::core::types::{EthAddress, Felt};
 
     let params_value: serde_json::Value = params.parse()?;
 
@@ -306,6 +306,20 @@ fn parse_l1_to_l2_message_params(
     let mut events = Vec::new();
 
     for (index, message) in messages_array.iter().enumerate() {
+        let from_address_str = message
+            .get("from_address")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| eyre!("Missing 'from_address' in message {}", index))?;
+
+        let from_address = EthAddress::from_hex(from_address_str).map_err(|e| {
+            eyre!(
+                "Invalid from_address '{}' in message {}: {}",
+                from_address_str,
+                index,
+                e
+            )
+        })?;
+
         // Extract l2_address field
         let l2_address_str = message
             .get("l2_address")
@@ -365,6 +379,7 @@ fn parse_l1_to_l2_message_params(
         }
 
         events.push(L1ToL2MessageSentEvent {
+            from_address,
             l2_address,
             selector,
             payload,

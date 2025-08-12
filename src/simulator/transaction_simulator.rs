@@ -14,7 +14,7 @@ use alloy::{
     sol_types::SolEvent,
 };
 
-use starknet::core::types::Felt;
+use starknet::core::types::{EthAddress, Felt};
 
 /// Represents the result of a transaction simulation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +71,7 @@ sol!(
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct L1ToL2MessageSentEvent {
+    pub from_address: EthAddress,
     pub l2_address: Felt,
     pub selector: Felt,
     pub payload: Vec<Felt>,
@@ -121,6 +122,7 @@ fn parse_starknet_l1_to_l2_message_sent_events(
         .iter()
         .filter_map(|log| StarknetCore::LogMessageToL2::decode_log(log.as_ref()).ok())
         .map(|l1_to_l2_log| L1ToL2MessageSentEvent {
+            from_address: EthAddress::from_str(&l1_to_l2_log.fromAddress.to_string()).unwrap(),
             l2_address: Felt::from_str(&l1_to_l2_log.toAddress.to_string()).unwrap(),
             selector: Felt::from_str(&l1_to_l2_log.selector.to_string()).unwrap(),
             payload: l1_to_l2_log
@@ -582,6 +584,7 @@ mod tests {
         );
         for (i, log) in l1_to_l2_logs.iter().enumerate() {
             println!("  Event {}:", i + 1);
+            println!("    from_address: {:?}", log.from_address);
             println!("    to_address: {}", log.l2_address);
             println!("    selector: {}", log.selector);
             println!("    payload: {:?}", log.payload);
@@ -598,6 +601,9 @@ mod tests {
 
         let event = &l1_to_l2_logs[0];
 
+        let expected_from_address =
+            EthAddress::from_str("0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4").unwrap();
+
         // Expected values based on the actual decoded event output
         // to_address: Convert from decimal output we see: 2524392021852001135582825949054576525094493216367559068627275826195272239197
         let expected_to_address = Felt::from_str(
@@ -609,6 +615,8 @@ mod tests {
             "774397379524139446221206168840917193112228400237242521560346153613428128537",
         )
         .unwrap();
+
+        assert_eq!(event.from_address, expected_from_address);
 
         // Assert the to_address matches expected value
         assert_eq!(
