@@ -1,7 +1,7 @@
-use eyre::Result;
 use estimate_starknet_message_fee::simulator::{
     NetworkConfig, TransactionSimulator, UnsignedTransactionData,
 };
+use eyre::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -10,7 +10,7 @@ async fn main() -> Result<()> {
     // 1. Create a network configuration with your RPC URL
     let config = NetworkConfig {
         l1_rpc_url: "https://eth.llamarpc.com".to_string(), // Replace with your RPC URL
-        block_number: None, // Use latest block
+        block_number: None,                                 // Use latest block
     };
 
     // 2. Create a transaction simulator
@@ -20,13 +20,13 @@ async fn main() -> Result<()> {
     let unsigned_tx = UnsignedTransactionData {
         from: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266".to_string(), // Sender address
         to: Some("0x70997970C51812dc3A010C7d01b50e0d17dc79C8".to_string()), // Recipient address
-        value: "1000000000000000000".to_string(), // 1 ETH in wei
-        data: vec![], // No data for simple transfer
-        gas_limit: Some(21000), // Standard gas limit for ETH transfer
+        value: "1000000000000000000".to_string(),                       // 1 ETH in wei
+        data: vec![],                               // No data for simple transfer
+        gas_limit: Some(21000),                     // Standard gas limit for ETH transfer
         gas_price: Some("20000000000".to_string()), // 20 gwei
-        max_fee_per_gas: None, // Optional: use for EIP-1559 transactions
-        max_priority_fee_per_gas: None, // Optional: use for EIP-1559 transactions
-        nonce: None, // Let the provider determine the nonce
+        max_fee_per_gas: None,                      // Optional: use for EIP-1559 transactions
+        max_priority_fee_per_gas: None,             // Optional: use for EIP-1559 transactions
+        nonce: None,                                // Let the provider determine the nonce
     };
 
     // 4. Simulate the unsigned transaction
