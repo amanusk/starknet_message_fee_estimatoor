@@ -1,3 +1,5 @@
 pub mod transaction_simulator;
 
-pub use transaction_simulator::{NetworkConfig, TransactionData, TransactionSimulator};
+pub use transaction_simulator::{
+    NetworkConfig, TransactionData, TransactionSimulator, UnsignedTransactionData,
+};

@@ -7,12 +7,15 @@ use tracing::info;
 use alloy::{
     consensus::TxEnvelope,
     eips::Encodable2718,
+    network::TransactionBuilder,
     node_bindings::Anvil,
-    primitives::U256,
+    primitives::{Address, U256},
     providers::{Provider, ProviderBuilder},
+    rpc::types::TransactionRequest,
     sol,
     sol_types::SolEvent,
 };
+use serde_json::{json, Value};
 
 use starknet::core::types::{EthAddress, Felt};
 
@@ -47,6 +50,20 @@ pub struct TransactionData {
     pub gas_limit: u64,
     pub gas_price: String,
     pub nonce: u64,
+}
+
+/// Unsigned transaction data structure for simulation with impersonation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnsignedTransactionData {
+    pub from: String,
+    pub to: Option<String>,
+    pub value: String,
+    pub data: Vec<u8>,
+    pub gas_limit: Option<u64>,
+    pub gas_price: Option<String>,
+    pub max_fee_per_gas: Option<String>,
+    pub max_priority_fee_per_gas: Option<String>,
+    pub nonce: Option<u64>,
 }
 
 /// Main transaction simulator struct
@@ -110,6 +127,114 @@ pub async fn simulate_tx_with_receipt(
     let raw_tx = target_tx.encoded_2718();
     let pending = forked_provider.send_raw_transaction(&raw_tx).await?;
     let receipt = pending.get_receipt().await?;
+    let gas_used = receipt.gas_used;
+    Ok((gas_used, receipt))
+}
+
+/// Simulate an unsigned transaction with account impersonation and return both gas used and receipt
+pub async fn simulate_unsigned_tx_with_receipt(
+    rpc_url: &str,
+    unsigned_tx: &UnsignedTransactionData,
+) -> Result<(u64, alloy::rpc::types::TransactionReceipt), ErrReport> {
+    let anvil = Anvil::new()
+        .arg("--fork-url")
+        .arg(rpc_url)
+        .try_spawn()
+        .unwrap();
+    let forked_provider = ProviderBuilder::new().connect_http(anvil.endpoint_url());
+
+    // Parse the from address
+    let from_address = unsigned_tx
+        .from
+        .parse::<Address>()
+        .map_err(|e| eyre!("Invalid from address '{}': {}", unsigned_tx.from, e))?;
+
+    // Impersonate the from account
+    let _: Value = forked_provider
+        .raw_request("anvil_impersonateAccount".into(), json!([from_address]))
+        .await
+        .map_err(|e| eyre!("Failed to impersonate account {}: {}", from_address, e))?;
+
+    // Build the transaction request
+    let mut tx_request = TransactionRequest::default().with_from(from_address);
+
+    // Set the to address if provided
+    if let Some(to_str) = &unsigned_tx.to {
+        let to_address = to_str
+            .parse::<Address>()
+            .map_err(|e| eyre!("Invalid to address '{}': {}", to_str, e))?;
+        tx_request = tx_request.with_to(to_address);
+    }
+
+    // Set the value
+    let value = U256::from_str(&unsigned_tx.value)
+        .map_err(|e| eyre!("Invalid value '{}': {}", unsigned_tx.value, e))?;
+    tx_request = tx_request.with_value(value);
+
+    // Set the data
+    if !unsigned_tx.data.is_empty() {
+        tx_request = tx_request.with_input(unsigned_tx.data.clone());
+    }
+
+    // Set gas limit if provided
+    if let Some(gas_limit) = unsigned_tx.gas_limit {
+        tx_request = tx_request.with_gas_limit(gas_limit);
+    }
+
+    // Set nonce if provided
+    if let Some(nonce) = unsigned_tx.nonce {
+        tx_request = tx_request.with_nonce(nonce);
+    }
+
+    // Set gas price or EIP-1559 fees
+    if let Some(gas_price_str) = &unsigned_tx.gas_price {
+        let gas_price = gas_price_str
+            .parse::<u128>()
+            .map_err(|e| eyre!("Invalid gas price '{}': {}", gas_price_str, e))?;
+        tx_request = tx_request.with_gas_price(gas_price);
+    } else if let (Some(max_fee_str), Some(max_priority_fee_str)) = (
+        &unsigned_tx.max_fee_per_gas,
+        &unsigned_tx.max_priority_fee_per_gas,
+    ) {
+        let max_fee = max_fee_str
+            .parse::<u128>()
+            .map_err(|e| eyre!("Invalid max fee per gas '{}': {}", max_fee_str, e))?;
+        let max_priority_fee = max_priority_fee_str.parse::<u128>().map_err(|e| {
+            eyre!(
+                "Invalid max priority fee per gas '{}': {}",
+                max_priority_fee_str,
+                e
+            )
+        })?;
+        tx_request = tx_request.with_max_fee_per_gas(max_fee);
+        tx_request = tx_request.with_max_priority_fee_per_gas(max_priority_fee);
+    }
+
+    // Send the transaction
+    let pending = forked_provider
+        .send_transaction(tx_request)
+        .await
+        .map_err(|e| eyre!("Failed to send transaction: {}", e))?;
+    let receipt = pending
+        .get_receipt()
+        .await
+        .map_err(|e| eyre!("Failed to get transaction receipt: {}", e))?;
+
+    // Stop impersonating the account
+    let _: Value = forked_provider
+        .raw_request(
+            "anvil_stopImpersonatingAccount".into(),
+            json!([from_address]),
+        )
+        .await
+        .map_err(|e| {
+            eyre!(
+                "Failed to stop impersonating account {}: {}",
+                from_address,
+                e
+            )
+        })?;
+
     let gas_used = receipt.gas_used;
     Ok((gas_used, receipt))
 }
@@ -205,6 +330,18 @@ impl TransactionSimulator {
     ) -> Result<(u64, alloy::rpc::types::TransactionReceipt)> {
         info!("Simulating transaction envelope with receipt");
         simulate_tx_with_receipt(&self.network_config.l1_rpc_url, target_tx).await
+    }
+
+    /// Simulate an unsigned transaction with account impersonation and return both gas used and receipt
+    pub async fn simulate_unsigned_tx_with_receipt(
+        &self,
+        unsigned_tx: &UnsignedTransactionData,
+    ) -> Result<(u64, alloy::rpc::types::TransactionReceipt)> {
+        info!(
+            "Simulating unsigned transaction with impersonation: {:?}",
+            unsigned_tx
+        );
+        simulate_unsigned_tx_with_receipt(&self.network_config.l1_rpc_url, unsigned_tx).await
     }
 
     /// Parse Starknet L1 to L2 message events from a transaction receipt
@@ -673,4 +810,359 @@ mod tests {
     // TODO: add test with two events
 
     // TODO: add test with no events
+
+    #[tokio::test]
+    async fn test_simulate_unsigned_tx_with_receipt() {
+        // Spawn Anvil and get its endpoint URL
+        let anvil = Anvil::new().try_spawn().unwrap();
+        let provider = ProviderBuilder::new().connect_http(anvil.endpoint_url());
+        let accounts = provider.get_accounts().await.unwrap();
+        let alice = accounts[0];
+        let bob = accounts[1];
+
+        // Create unsigned transaction data for a simple ETH transfer
+        let unsigned_tx = UnsignedTransactionData {
+            from: alice.to_string(),
+            to: Some(bob.to_string()),
+            value: "1000000000000000000".to_string(), // 1 ETH in wei
+            data: vec![],
+            gas_limit: Some(21000),
+            gas_price: Some("20000000000".to_string()), // 20 gwei
+            max_fee_per_gas: None,
+            max_priority_fee_per_gas: None,
+            nonce: None, // Let the provider determine the nonce
+        };
+
+        // Create a TransactionSimulator with the Anvil endpoint
+        let config = NetworkConfig {
+            l1_rpc_url: anvil.endpoint_url().to_string(),
+            block_number: None,
+        };
+        let simulator = TransactionSimulator::new(config).unwrap();
+
+        // Test the simulate_unsigned_tx_with_receipt method
+        let (gas_used, receipt) = simulator
+            .simulate_unsigned_tx_with_receipt(&unsigned_tx)
+            .await
+            .unwrap();
+
+        // Verify that gas was used (should be exactly 21000 for a simple transfer)
+        assert!(gas_used > 0, "Gas used should be greater than 0");
+        assert!(gas_used <= 21000, "Gas used should not exceed gas limit");
+
+        // Verify the receipt contains expected information
+        assert!(
+            !receipt.transaction_hash.is_zero(),
+            "Transaction hash should be present"
+        );
+        assert!(receipt.status(), "Transaction should be successful");
+        assert_eq!(receipt.from, alice, "From address should match");
+        assert_eq!(receipt.to, Some(bob), "To address should match");
+
+        println!("Simulated unsigned transaction gas used: {}", gas_used);
+        println!("Transaction hash: {:?}", receipt.transaction_hash);
+    }
+
+    #[tokio::test]
+    async fn test_simulate_unsigned_tx_with_contract_interaction() {
+        // Spawn Anvil and get its endpoint URL
+        let anvil = Anvil::new().try_spawn().unwrap();
+        let provider = ProviderBuilder::new().connect_http(anvil.endpoint_url());
+        let accounts = provider.get_accounts().await.unwrap();
+        let alice = accounts[0];
+        let bob = accounts[1];
+
+        // First, deploy an ERC20 contract using a signed transaction
+        let alice_private_key = anvil.keys()[0].clone();
+        let alice_signer = PrivateKeySigner::from(alice_private_key);
+        let alice_provider = ProviderBuilder::new()
+            .wallet(alice_signer.clone())
+            .connect_provider(provider.clone());
+        let erc20_contract = ERC20Example::deploy(&alice_provider).await.unwrap();
+        let token_address = erc20_contract.address();
+
+        // Create unsigned transaction data for an ERC20 transfer
+        // ERC20 transfer function call data: transfer(address to, uint256 amount)
+        let transfer_amount = U256::from(1000u64);
+        let mut contract_data = vec![0xa9, 0x05, 0x9c, 0xbb]; // transfer function selector
+
+        // Address parameter (32 bytes): 12 bytes padding + 20 bytes address
+        contract_data.extend_from_slice(&[0u8; 12]); // padding for address
+        contract_data.extend_from_slice(bob.as_slice()); // bob's address (20 bytes)
+
+        // U256 parameter (32 bytes): amount in big-endian format
+        contract_data.extend_from_slice(&transfer_amount.to_be_bytes::<32>()); // amount
+
+        let unsigned_tx = UnsignedTransactionData {
+            from: alice.to_string(),
+            to: Some(token_address.to_string()),
+            value: "0".to_string(), // No ETH transfer, just contract call
+            data: contract_data,
+            gas_limit: Some(100000), // Higher gas limit for contract interaction
+            gas_price: Some("20000000000".to_string()), // 20 gwei
+            max_fee_per_gas: None,
+            max_priority_fee_per_gas: None,
+            nonce: None, // Let the provider determine the nonce
+        };
+
+        // Create a TransactionSimulator with the Anvil endpoint
+        let config = NetworkConfig {
+            l1_rpc_url: anvil.endpoint_url().to_string(),
+            block_number: None,
+        };
+        let simulator = TransactionSimulator::new(config).unwrap();
+
+        // Test the simulate_unsigned_tx_with_receipt method
+        let (gas_used, receipt) = simulator
+            .simulate_unsigned_tx_with_receipt(&unsigned_tx)
+            .await
+            .unwrap();
+
+        // Print all events emitted by the transaction
+        print_transaction_events(&receipt);
+
+        // Verify that gas was used (should be higher than simple transfer)
+        assert!(
+            gas_used > 21000,
+            "Gas used should be greater than simple transfer"
+        );
+        assert!(gas_used <= 100000, "Gas used should not exceed gas limit");
+
+        // Verify the receipt contains expected information
+        assert!(
+            !receipt.transaction_hash.is_zero(),
+            "Transaction hash should be present"
+        );
+        assert!(receipt.status(), "Transaction should be successful");
+        assert_eq!(receipt.from, alice, "From address should match");
+        assert_eq!(
+            receipt.to,
+            Some(*token_address),
+            "To address should match contract"
+        );
+
+        println!(
+            "Simulated unsigned contract transaction gas used: {}",
+            gas_used
+        );
+    }
+
+    #[tokio::test]
+    async fn test_simulate_unsigned_tx_with_eip1559() {
+        // Spawn Anvil and get its endpoint URL
+        let anvil = Anvil::new().try_spawn().unwrap();
+        let provider = ProviderBuilder::new().connect_http(anvil.endpoint_url());
+        let accounts = provider.get_accounts().await.unwrap();
+        let alice = accounts[0];
+        let bob = accounts[1];
+
+        // Create unsigned transaction data using EIP-1559 fee structure
+        let unsigned_tx = UnsignedTransactionData {
+            from: alice.to_string(),
+            to: Some(bob.to_string()),
+            value: "500000000000000000".to_string(), // 0.5 ETH in wei
+            data: vec![],
+            gas_limit: Some(21000),
+            gas_price: None, // Don't use legacy gas price
+            max_fee_per_gas: Some("30000000000".to_string()), // 30 gwei
+            max_priority_fee_per_gas: Some("2000000000".to_string()), // 2 gwei
+            nonce: None,     // Let the provider determine the nonce
+        };
+
+        // Create a TransactionSimulator with the Anvil endpoint
+        let config = NetworkConfig {
+            l1_rpc_url: anvil.endpoint_url().to_string(),
+            block_number: None,
+        };
+        let simulator = TransactionSimulator::new(config).unwrap();
+
+        // Test the simulate_unsigned_tx_with_receipt method
+        let (gas_used, receipt) = simulator
+            .simulate_unsigned_tx_with_receipt(&unsigned_tx)
+            .await
+            .unwrap();
+
+        // Verify that gas was used
+        assert!(gas_used > 0, "Gas used should be greater than 0");
+        assert!(gas_used <= 21000, "Gas used should not exceed gas limit");
+
+        // Verify the receipt contains expected information
+        assert!(
+            !receipt.transaction_hash.is_zero(),
+            "Transaction hash should be present"
+        );
+        assert!(receipt.status(), "Transaction should be successful");
+        assert_eq!(receipt.from, alice, "From address should match");
+        assert_eq!(receipt.to, Some(bob), "To address should match");
+
+        println!(
+            "Simulated unsigned EIP-1559 transaction gas used: {}",
+            gas_used
+        );
+    }
+
+    #[tokio::test]
+    async fn test_simulate_unsigned_starknet_deposit_tx() {
+        // This test simulates the same Starknet deposit transaction from test_starknet_deposit_tx
+        // but using the unsigned transaction approach instead of a signed transaction envelope
+
+        // Spawn Anvil with fork from mainnet at the specific block
+        let anvil = Anvil::new()
+            .arg("--fork-url")
+            .arg("https://reth-ethereum.ithaca.xyz/rpc")
+            .fork_block_number(23113921)
+            .try_spawn()
+            .unwrap();
+
+        // Create unsigned transaction data for the Starknet deposit
+        // This replicates the transaction: https://etherscan.io/tx/0xd5fdee26751ba7175444cb587c1b1ddeca3a0d22cbf87bf0c1d6b4d263c6a699
+        let unsigned_tx = UnsignedTransactionData {
+            from: "0x11Dd734a52Cd2EE23FFe8B5054F5A8ECF5D1Ad50".to_string(), // Original sender
+            to: Some("0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4".to_string()), // Starknet Core contract
+            value: "25344429452040".to_string(), // Value in wei from original tx
+            data: hex!("0efe6a8b000000000000000000000000ca14007eff0db1f8135f4c25b34de49ab0d42766000000000000000000000000000000000000000000004f9c6a3ec958b0de0000013cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1").to_vec(),
+            gas_limit: Some(190_674), // Gas limit from original tx
+            gas_price: Some("2306574200".to_string()), // Gas price from original tx
+            max_fee_per_gas: None, // Using legacy gas pricing
+            max_priority_fee_per_gas: None,
+            nonce: Some(58), // Nonce from original tx
+        };
+
+        // Create a TransactionSimulator with the forked Anvil endpoint
+        let config = NetworkConfig {
+            l1_rpc_url: anvil.endpoint_url().to_string(),
+            block_number: None,
+        };
+        let simulator = TransactionSimulator::new(config).unwrap();
+
+        // Test the simulate_unsigned_tx_with_receipt method
+        let (gas_used, receipt) = simulator
+            .simulate_unsigned_tx_with_receipt(&unsigned_tx)
+            .await
+            .unwrap();
+
+        // Print all events emitted by the transaction
+        print_transaction_events(&receipt);
+
+        // Parse L1 to L2 message events from the receipt
+        let l1_to_l2_logs = simulator.parse_l1_to_l2_message_events(&receipt).unwrap();
+        println!(
+            "Found {} L1 to L2 message sent events:",
+            l1_to_l2_logs.len()
+        );
+        for (i, log) in l1_to_l2_logs.iter().enumerate() {
+            println!("  Event {}:", i + 1);
+            println!("    from_address: {:?}", log.from_address);
+            println!("    to_address: {}", log.l2_address);
+            println!("    selector: {}", log.selector);
+            println!("    payload: {:?}", log.payload);
+        }
+
+        // Verify the gas usage is reasonable
+        assert!(gas_used > 0, "Gas used should be greater than 0");
+        assert!(
+            gas_used <= 190_674,
+            "Gas used should not exceed the specified gas limit"
+        );
+
+        // Verify the receipt contains expected information
+        assert!(
+            !receipt.transaction_hash.is_zero(),
+            "Transaction hash should be present"
+        );
+        assert!(receipt.status(), "Transaction should be successful");
+        assert_eq!(
+            receipt.from,
+            address!("0x11Dd734a52Cd2EE23FFe8B5054F5A8ECF5D1Ad50"),
+            "From address should match"
+        );
+        assert_eq!(
+            receipt.to,
+            Some(
+                "0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4"
+                    .parse()
+                    .unwrap()
+            ),
+            "To address should match Starknet Core contract"
+        );
+
+        // Assertions for the Starknet deposit specifics
+        // This specific transaction should emit exactly 1 L1ToL2MessageSent event
+        assert_eq!(
+            l1_to_l2_logs.len(),
+            1,
+            "Expected exactly 1 L1ToL2MessageSent event, but found {}",
+            l1_to_l2_logs.len()
+        );
+
+        let event = &l1_to_l2_logs[0];
+
+        let expected_from_address =
+            EthAddress::from_hex("0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4").unwrap();
+
+        // Expected values based on the actual decoded event output from the signed tx test
+        let expected_to_address = Felt::from_str(
+            "2524392021852001135582825949054576525094493216367559068627275826195272239197",
+        )
+        .unwrap();
+        let expected_selector = Felt::from_str(
+            "774397379524139446221206168840917193112228400237242521560346153613428128537",
+        )
+        .unwrap();
+
+        assert_eq!(event.from_address, expected_from_address);
+        assert_eq!(
+            event.l2_address, expected_to_address,
+            "L2 address mismatch. Expected: {}, Got: {}",
+            expected_to_address, event.l2_address
+        );
+        assert_eq!(
+            event.selector, expected_selector,
+            "Selector mismatch. Expected: {}, Got: {}",
+            expected_selector, event.selector
+        );
+
+        // Assert that payload is not empty and has expected structure
+        assert!(
+            !event.payload.is_empty(),
+            "Expected non-empty payload, but payload was empty"
+        );
+
+        // The payload should contain exactly 5 elements based on the original test
+        assert_eq!(
+            event.payload.len(),
+            5,
+            "Expected payload to have 5 elements, but found {}",
+            event.payload.len()
+        );
+
+        // Assert specific payload values from the original test
+        let expected_payload = vec![
+            Felt::from_str("0xca14007eff0db1f8135f4c25b34de49ab0d42766").unwrap(), // First payload element
+            Felt::from_str("0x11dd734a52cd2ee23ffe8b5054f5a8ecf5d1ad50").unwrap(), // Second payload element
+            Felt::from_str("0x13cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1")
+                .unwrap(), // Third payload element
+            Felt::from_str("0x4f9c6a3ec958b0de0000").unwrap(), // Fourth payload element
+            Felt::ZERO,                                        // Fifth payload element (0x0)
+        ];
+
+        for (i, (actual, expected)) in event
+            .payload
+            .iter()
+            .zip(expected_payload.iter())
+            .enumerate()
+        {
+            assert_eq!(
+                actual, expected,
+                "Payload element {} mismatch. Expected: {}, Got: {}",
+                i, expected, actual
+            );
+        }
+
+        println!(
+            "Successfully simulated unsigned Starknet deposit transaction with gas used: {}",
+            gas_used
+        );
+        println!("All L1ToL2MessageSent event validations passed!");
+    }
 }
