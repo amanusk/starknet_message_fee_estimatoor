@@ -181,3 +181,66 @@ APP_STARKNET_ENDPOINT=https://your-starknet-rpc.com cargo run
 ```
 
 The service will start on `http://127.0.0.1:8080` by default.
+
+## Unsigned Transaction Simulation
+
+The library also provides functionality to simulate unsigned transactions using account impersonation. This is useful for testing and gas estimation without needing private keys.
+
+### Usage Example
+
+```rust
+use eyre::Result;
+use estimate_starknet_message_fee::simulator::{
+    NetworkConfig, TransactionSimulator, UnsignedTransactionData,
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Create a network configuration
+    let config = NetworkConfig {
+        l1_rpc_url: "https://eth.llamarpc.com".to_string(),
+        block_number: None,
+    };
+
+    // Create a transaction simulator
+    let simulator = TransactionSimulator::new(config)?;
+
+    // Create unsigned transaction data
+    let unsigned_tx = UnsignedTransactionData {
+        from: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266".to_string(),
+        to: Some("0x70997970C51812dc3A010C7d01b50e0d17dc79C8".to_string()),
+        value: "1000000000000000000".to_string(), // 1 ETH
+        data: vec![],
+        gas_limit: Some(21000),
+        gas_price: Some("20000000000".to_string()), // 20 gwei
+        max_fee_per_gas: None,
+        max_priority_fee_per_gas: None,
+        nonce: None,
+    };
+
+    // Simulate the transaction
+    let (gas_used, receipt) = simulator
+        .simulate_unsigned_tx_with_receipt(&unsigned_tx)
+        .await?;
+
+    println!("Gas used: {}", gas_used);
+    println!("Transaction hash: {:?}", receipt.transaction_hash);
+
+    Ok(())
+}
+```
+
+### Features
+
+- **Account Impersonation**: Simulate transactions from any address without private keys
+- **Fork Simulation**: Executes on a fork of the current mainnet state
+- **Gas Estimation**: Returns accurate gas usage for the transaction
+- **Receipt Analysis**: Full transaction receipt for event inspection
+- **EIP-1559 Support**: Supports both legacy and EIP-1559 fee structures
+
+### Use Cases
+
+- Testing smart contract interactions
+- Gas estimation for transaction planning
+- Simulating complex DeFi operations
+- Analyzing transaction effects without broadcasting
