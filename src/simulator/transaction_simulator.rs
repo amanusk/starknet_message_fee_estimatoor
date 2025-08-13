@@ -351,89 +351,6 @@ impl TransactionSimulator {
     ) -> Result<Vec<L1ToL2MessageSentEvent>> {
         parse_starknet_l1_to_l2_message_sent_events(receipt)
     }
-
-    /// Simulate a transaction and return the result
-    pub async fn simulate_transaction(
-        &self,
-        transaction: TransactionData,
-    ) -> Result<SimulationResult> {
-        info!("Starting transaction simulation for tx: {:?}", transaction);
-
-        // Validate transaction data
-        self.validate_transaction(&transaction)?;
-
-        // Perform simulation
-        let result = self.execute_simulation(transaction).await?;
-
-        info!("Simulation completed with result: {:?}", result);
-        Ok(result)
-    }
-
-    /// Estimate gas fee for a transaction
-    pub async fn estimate_fee(&self, transaction: TransactionData) -> Result<u64> {
-        info!("Estimating fee for transaction: {:?}", transaction);
-
-        let simulation_result = self.simulate_transaction(transaction).await?;
-        let estimated_gas = simulation_result.gas_used;
-
-        info!("Estimated gas: {}", estimated_gas);
-        Ok(estimated_gas)
-    }
-
-    /// Validate transaction data before simulation
-    fn validate_transaction(&self, transaction: &TransactionData) -> Result<()> {
-        if transaction.from.is_empty() {
-            return Err(eyre!(
-                "Invalid transaction data: From address cannot be empty"
-            ));
-        }
-
-        if transaction.gas_limit == 0 {
-            return Err(eyre!(
-                "Invalid transaction data: Gas limit must be greater than 0"
-            ));
-        }
-
-        // Validate address format for 'from' field
-        if !transaction.from.starts_with("0x") || transaction.from.len() != 42 {
-            return Err(eyre!("Invalid from address format: {}", transaction.from));
-        }
-
-        // Validate 'to' address if present
-        if let Some(to) = &transaction.to {
-            if !to.starts_with("0x") || to.len() != 42 {
-                return Err(eyre!("Invalid to address format: {}", to));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Execute the actual simulation
-    async fn execute_simulation(&self, transaction: TransactionData) -> Result<SimulationResult> {
-        // For now, this is a simplified implementation that returns estimated values
-        // In a full implementation, this would use the Anvil simulation infrastructure
-        // to execute the transaction and collect detailed results
-
-        // Basic gas estimation based on transaction type
-        let base_gas = 21000u64; // Base transaction cost
-        let data_gas = transaction.data.len() as u64 * 16; // Rough data cost estimation
-        let estimated_gas = base_gas + data_gas;
-
-        info!(
-            "Executing simulation for transaction with estimated gas: {}",
-            estimated_gas
-        );
-
-        Ok(SimulationResult {
-            success: true,
-            gas_used: estimated_gas,
-            return_data: vec![],
-            events: vec![],
-            state_changes: HashMap::new(),
-            error_message: None,
-        })
-    }
 }
 
 impl Default for NetworkConfig {
@@ -462,25 +379,6 @@ mod tests {
         let config = NetworkConfig::default();
         let simulator = TransactionSimulator::new(config);
         assert!(simulator.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_transaction_validation() {
-        let config = NetworkConfig::default();
-        let simulator = TransactionSimulator::new(config).unwrap();
-
-        let invalid_tx = TransactionData {
-            from: "".to_string(), // Invalid empty from address
-            to: None,
-            value: "0".to_string(),
-            data: vec![],
-            gas_limit: 21000,
-            gas_price: "20000000000".to_string(),
-            nonce: 0,
-        };
-
-        let result = simulator.validate_transaction(&invalid_tx);
-        assert!(result.is_err());
     }
 
     #[tokio::test]
@@ -784,7 +682,7 @@ mod tests {
         );
 
         // Assert specific payload values from the decoded output
-        let expected_payload = vec![
+        let expected_payload = [
             Felt::from_str("0xca14007eff0db1f8135f4c25b34de49ab0d42766").unwrap(), // First payload element
             Felt::from_str("0x11dd734a52cd2ee23ffe8b5054f5a8ecf5d1ad50").unwrap(), // Second payload element
             Felt::from_str("0x13cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1")
@@ -1137,7 +1035,7 @@ mod tests {
         );
 
         // Assert specific payload values from the original test
-        let expected_payload = vec![
+        let expected_payload = [
             Felt::from_str("0xca14007eff0db1f8135f4c25b34de49ab0d42766").unwrap(), // First payload element
             Felt::from_str("0x11dd734a52cd2ee23ffe8b5054f5a8ecf5d1ad50").unwrap(), // Second payload element
             Felt::from_str("0x13cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1")
