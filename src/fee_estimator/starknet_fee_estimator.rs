@@ -194,7 +194,6 @@ impl StarknetFeeEstimator {
 mod tests {
     use super::*;
     use starknet::core::types::Felt;
-    use starknet::providers::Url;
 
     #[test]
     fn test_fee_estimator_creation() {
@@ -301,6 +300,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_jsonrpc_estimate_message_fee_sanity_check() {
+        use starknet::core::types::EthAddress;
+        use starknet::providers::Url;
+
         let rpc_url = std::env::var("STARKNET_RPC")
             .unwrap_or_else(|_| "https://pathfinder.rpc.sepolia.starknet.rs/rpc/v0_8".into());
         let rpc_client = JsonRpcClient::new(HttpTransport::new(Url::parse(&rpc_url).unwrap()));
