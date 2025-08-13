@@ -1,9 +1,9 @@
 use eyre::{eyre, Result};
 use serde::{Deserialize, Serialize};
-use starknet::core::types::{BlockId, BlockTag, EthAddress, Felt, MsgFromL1};
+use starknet::core::types::{BlockId, BlockTag, Felt, MsgFromL1};
 use starknet::providers::{jsonrpc::HttpTransport, JsonRpcClient, Provider};
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::simulator::transaction_simulator::L1ToL2MessageSentEvent;
 
@@ -103,18 +103,9 @@ impl StarknetFeeEstimator {
         Ok(MessageFeeEstimate {
             l2_address: event.l2_address,
             selector: event.selector,
-            gas_consumed: fee_estimate.l1_gas_consumed.try_into().unwrap_or_else(|_| {
-                warn!("Gas consumed value too large, using u64::MAX");
-                u64::MAX
-            }),
-            gas_price: fee_estimate.l1_gas_price.try_into().unwrap_or_else(|_| {
-                warn!("Gas price value too large, using u128::MAX");
-                u128::MAX
-            }),
-            overall_fee: fee_estimate.overall_fee.try_into().unwrap_or_else(|_| {
-                warn!("Overall fee value too large, using u128::MAX");
-                u128::MAX
-            }),
+            gas_consumed: fee_estimate.l1_gas_consumed,
+            gas_price: fee_estimate.l1_gas_price,
+            overall_fee: fee_estimate.overall_fee,
             unit: format!("{:?}", fee_estimate.unit),
         })
     }

@@ -682,7 +682,7 @@ mod tests {
         );
 
         // Assert specific payload values from the decoded output
-        let expected_payload = vec![
+        let expected_payload = [
             Felt::from_str("0xca14007eff0db1f8135f4c25b34de49ab0d42766").unwrap(), // First payload element
             Felt::from_str("0x11dd734a52cd2ee23ffe8b5054f5a8ecf5d1ad50").unwrap(), // Second payload element
             Felt::from_str("0x13cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1")
@@ -1035,7 +1035,7 @@ mod tests {
         );
 
         // Assert specific payload values from the original test
-        let expected_payload = vec![
+        let expected_payload = [
             Felt::from_str("0xca14007eff0db1f8135f4c25b34de49ab0d42766").unwrap(), // First payload element
             Felt::from_str("0x11dd734a52cd2ee23ffe8b5054f5a8ecf5d1ad50").unwrap(), // Second payload element
             Felt::from_str("0x13cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1")
