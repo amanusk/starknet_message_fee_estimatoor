@@ -152,8 +152,12 @@ The simulator is designed with placeholder implementations that can be filled in
 
 ## Next Steps
 
-- [ ] Implement Ethereum transaction parsing and simulation
-- [ ] Add event extraction from simulation results
-- [ ] Integrate Starknet client for fee estimation
+- [x] Implement Ethereum transaction parsing and simulation
+- [x] Add event extraction from simulation results
+- [x] Integrate Starknet client for fee estimation
 - [ ] Add proper error handling and validation
 - [ ] Implement logging and monitoring
+- [ ] Set a simplified API and test it
+- [ ] Set possible errors returned from the server
+- [ ] Publish as a crate and library
+- [ ] More test coverage for possible failures and edge cases
