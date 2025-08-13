@@ -17,6 +17,7 @@ pub struct RpcServer {
 }
 
 impl RpcServer {
+    #[allow(dead_code)]
     pub fn new() -> Result<Self> {
         // Initialize simulator with default network configuration
         let network_config = NetworkConfig::default();
@@ -34,10 +35,7 @@ impl RpcServer {
 
     pub fn new_with_config(l1_rpc_url: String, starknet_rpc_url: String) -> Result<Self> {
         // Initialize simulator with custom network configuration
-        let network_config = NetworkConfig {
-            l1_rpc_url,
-            block_number: None,
-        };
+        let network_config = NetworkConfig { l1_rpc_url };
         let simulator = TransactionSimulator::new(network_config)?;
 
         // Initialize Starknet fee estimator with custom RPC URL

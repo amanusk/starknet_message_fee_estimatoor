@@ -94,23 +94,6 @@ pub struct L1ToL2MessageSentEvent {
     pub payload: Vec<Felt>,
 }
 
-/// Simulate a transaction using Anvil and return gas used
-pub async fn simulate_tx(rpc_url: &str, target_tx: &TxEnvelope) -> Result<u64, ErrReport> {
-    let anvil = Anvil::new()
-        .arg("--fork-url")
-        .arg(rpc_url)
-        .try_spawn()
-        .unwrap();
-    let forked_provider = ProviderBuilder::new().connect_http(anvil.endpoint_url());
-
-    // Encode the TxEnvelope to raw bytes and send as raw transaction
-    let raw_tx = target_tx.encoded_2718();
-    let pending = forked_provider.send_raw_transaction(&raw_tx).await?;
-    let receipt = pending.get_receipt().await?;
-    let gas_used = receipt.gas_used;
-    Ok(gas_used)
-}
-
 /// Simulate a transaction and return both gas used and receipt for event inspection
 pub async fn simulate_tx_with_receipt(
     rpc_url: &str,
@@ -266,6 +249,7 @@ fn parse_starknet_l1_to_l2_message_sent_events(
 }
 
 /// Print detailed transaction events from a receipt (useful for debugging)
+#[allow(dead_code)]
 pub fn print_transaction_events(receipt: &alloy::rpc::types::TransactionReceipt) {
     println!("Transaction Events:");
     println!("==================");
@@ -298,7 +282,6 @@ pub fn print_transaction_events(receipt: &alloy::rpc::types::TransactionReceipt)
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {
     pub l1_rpc_url: String,
-    pub block_number: Option<u64>,
 }
 
 impl TransactionSimulator {
@@ -315,12 +298,6 @@ impl TransactionSimulator {
         }
 
         Ok(Self { network_config })
-    }
-
-    /// Simulate a transaction envelope using the L1 RPC
-    pub async fn simulate_tx_envelope(&self, target_tx: &TxEnvelope) -> Result<u64> {
-        info!("Simulating transaction envelope");
-        simulate_tx(&self.network_config.l1_rpc_url, target_tx).await
     }
 
     /// Simulate a transaction envelope and return both gas used and receipt
@@ -357,7 +334,6 @@ impl Default for NetworkConfig {
     fn default() -> Self {
         Self {
             l1_rpc_url: "http://localhost:8545".to_string(),
-            block_number: None,
         }
     }
 }
@@ -435,13 +411,12 @@ mod tests {
         // Create a TransactionSimulator with the Anvil endpoint
         let config = NetworkConfig {
             l1_rpc_url: anvil.endpoint_url().to_string(),
-            block_number: None,
         };
         let simulator = TransactionSimulator::new(config).unwrap();
 
-        // Test the simulate_tx_envelope method
-        let gas_used = simulator
-            .simulate_tx_envelope(&funding_tx_envelope)
+        // Test the simulate_tx_envelope_with_receipt method
+        let (gas_used, _receipt) = simulator
+            .simulate_tx_envelope_with_receipt(&funding_tx_envelope)
             .await
             .unwrap();
 
@@ -533,8 +508,6 @@ mod tests {
         // Create a TransactionSimulator with the Anvil endpoint
         let config = NetworkConfig {
             l1_rpc_url: rpc_url.to_string(),
-
-            block_number: None,
         };
         let simulator = TransactionSimulator::new(config).unwrap();
 
@@ -598,8 +571,6 @@ mod tests {
         // Create a TransactionSimulator with the Anvil endpoint
         let config = NetworkConfig {
             l1_rpc_url: rpc_url.to_string(),
-
-            block_number: None,
         };
         let simulator = TransactionSimulator::new(config).unwrap();
 
@@ -734,7 +705,6 @@ mod tests {
         // Create a TransactionSimulator with the Anvil endpoint
         let config = NetworkConfig {
             l1_rpc_url: anvil.endpoint_url().to_string(),
-            block_number: None,
         };
         let simulator = TransactionSimulator::new(config).unwrap();
 
@@ -806,7 +776,6 @@ mod tests {
         // Create a TransactionSimulator with the Anvil endpoint
         let config = NetworkConfig {
             l1_rpc_url: anvil.endpoint_url().to_string(),
-            block_number: None,
         };
         let simulator = TransactionSimulator::new(config).unwrap();
 
@@ -870,7 +839,6 @@ mod tests {
         // Create a TransactionSimulator with the Anvil endpoint
         let config = NetworkConfig {
             l1_rpc_url: anvil.endpoint_url().to_string(),
-            block_number: None,
         };
         let simulator = TransactionSimulator::new(config).unwrap();
 
@@ -929,7 +897,6 @@ mod tests {
         // Create a TransactionSimulator with the forked Anvil endpoint
         let config = NetworkConfig {
             l1_rpc_url: anvil.endpoint_url().to_string(),
-            block_number: None,
         };
         let simulator = TransactionSimulator::new(config).unwrap();
 
