@@ -10,7 +10,6 @@ async fn main() -> Result<()> {
     // 1. Create a network configuration with your RPC URL
     let config = NetworkConfig {
         l1_rpc_url: "https://eth.llamarpc.com".to_string(), // Replace with your RPC URL
-        block_number: None,                                 // Use latest block
     };
 
     // 2. Create a transaction simulator

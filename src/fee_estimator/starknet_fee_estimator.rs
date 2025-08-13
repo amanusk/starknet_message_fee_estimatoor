@@ -169,16 +169,6 @@ impl StarknetFeeEstimator {
             errors,
         })
     }
-
-    /// Get the current configuration
-    pub fn config(&self) -> &StarknetFeeEstimatorConfig {
-        &self.config
-    }
-
-    /// Update the block ID for future estimates
-    pub fn set_block_id(&mut self, block_id: BlockId) {
-        self.config.block_id = block_id;
-    }
 }
 
 #[cfg(test)]

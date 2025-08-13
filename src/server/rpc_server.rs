@@ -1,3 +1,4 @@
+use crate::api::{ApiError, ApiErrorCode, ApiResponse};
 use crate::fee_estimator::{StarknetFeeEstimator, StarknetFeeEstimatorConfig};
 use crate::simulator::transaction_simulator::L1ToL2MessageSentEvent;
 use crate::simulator::{NetworkConfig, TransactionSimulator, UnsignedTransactionData};
@@ -16,6 +17,7 @@ pub struct RpcServer {
 }
 
 impl RpcServer {
+    #[allow(dead_code)]
     pub fn new() -> Result<Self> {
         // Initialize simulator with default network configuration
         let network_config = NetworkConfig::default();
@@ -33,10 +35,7 @@ impl RpcServer {
 
     pub fn new_with_config(l1_rpc_url: String, starknet_rpc_url: String) -> Result<Self> {
         // Initialize simulator with custom network configuration
-        let network_config = NetworkConfig {
-            l1_rpc_url,
-            block_number: None,
-        };
+        let network_config = NetworkConfig { l1_rpc_url };
         let simulator = TransactionSimulator::new(network_config)?;
 
         // Initialize Starknet fee estimator with custom RPC URL
@@ -72,12 +71,14 @@ impl RpcServer {
                         Ok(events) => events,
                         Err(e) => {
                             error!("Failed to parse L1 to L2 message parameters: {}", e);
-                            return serde_json::json!({
-                                "error": {
-                                    "code": -32602,
-                                    "message": "Invalid parameters",
-                                    "data": e.to_string()
-                                }
+                            let api_error = ApiError::with_details(
+                                ApiErrorCode::InvalidInputFormat,
+                                "Invalid input format",
+                                e.to_string()
+                            );
+                            let response = ApiResponse::error(api_error);
+                            return serde_json::to_value(response).unwrap_or_else(|_| {
+                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                             });
                         }
                     };
@@ -89,18 +90,21 @@ impl RpcServer {
                         .await
                     {
                         Ok(summary) => {
-                            serde_json::json!({
-                                "result": summary
+                            let response = ApiResponse::success(summary);
+                            serde_json::to_value(response).unwrap_or_else(|_| {
+                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                             })
                         }
                         Err(e) => {
                             error!("L1 to L2 message fee estimation failed: {}", e);
-                            serde_json::json!({
-                                "error": {
-                                    "code": -32603,
-                                    "message": "L1 to L2 message fee estimation failed",
-                                    "data": e.to_string()
-                                }
+                            let api_error = ApiError::with_details(
+                                ApiErrorCode::FeeEstimationFailed,
+                                "Failed to estimate fee",
+                                e.to_string()
+                            );
+                            let response = ApiResponse::error(api_error);
+                            serde_json::to_value(response).unwrap_or_else(|_| {
+                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                             })
                         }
                     }
@@ -128,12 +132,14 @@ impl RpcServer {
                             Ok(envelope) => envelope,
                             Err(e) => {
                                 error!("Failed to parse signed transaction parameters: {}", e);
-                                return serde_json::json!({
-                                    "error": {
-                                        "code": -32602,
-                                        "message": "Invalid parameters",
-                                        "data": e.to_string()
-                                    }
+                                let api_error = ApiError::with_details(
+                                    ApiErrorCode::InvalidSignedTransaction,
+                                    "Invalid signed transaction",
+                                    e.to_string()
+                                );
+                                let response = ApiResponse::error(api_error);
+                                return serde_json::to_value(response).unwrap_or_else(|_| {
+                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                                 });
                             }
                         };
@@ -147,12 +153,14 @@ impl RpcServer {
                             Ok(result) => result,
                             Err(e) => {
                                 error!("Failed to simulate signed transaction: {}", e);
-                                return serde_json::json!({
-                                    "error": {
-                                        "code": -32603,
-                                        "message": "Transaction simulation failed",
-                                        "data": e.to_string()
-                                    }
+                                let api_error = ApiError::with_details(
+                                    ApiErrorCode::TransactionSimulationFailed,
+                                    "Failed to simulate transaction",
+                                    e.to_string()
+                                );
+                                let response = ApiResponse::error(api_error);
+                                return serde_json::to_value(response).unwrap_or_else(|_| {
+                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                                 });
                             }
                         };
@@ -166,12 +174,14 @@ impl RpcServer {
                                         "Failed to parse L1 to L2 message events from receipt: {}",
                                         e
                                     );
-                                    return serde_json::json!({
-                                        "error": {
-                                            "code": -32604,
-                                            "message": "Failed to parse message events",
-                                            "data": e.to_string()
-                                        }
+                                    let api_error = ApiError::with_details(
+                                        ApiErrorCode::TransactionSimulationFailed,
+                                        "Failed to parse message events",
+                                        e.to_string()
+                                    );
+                                    let response = ApiResponse::error(api_error);
+                                    return serde_json::to_value(response).unwrap_or_else(|_| {
+                                        serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                                     });
                                 }
                             };
@@ -183,18 +193,21 @@ impl RpcServer {
                             .await
                         {
                             Ok(summary) => {
-                                serde_json::json!({
-                                    "result": summary
+                                let response = ApiResponse::success(summary);
+                                serde_json::to_value(response).unwrap_or_else(|_| {
+                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                                 })
                             }
                             Err(e) => {
                                 error!("L1 to L2 message fee estimation failed: {}", e);
-                                serde_json::json!({
-                                    "error": {
-                                        "code": -32603,
-                                        "message": "L1 to L2 message fee estimation failed",
-                                        "data": e.to_string()
-                                    }
+                                let api_error = ApiError::with_details(
+                                    ApiErrorCode::FeeEstimationFailed,
+                                    "Failed to estimate fee",
+                                    e.to_string()
+                                );
+                                let response = ApiResponse::error(api_error);
+                                serde_json::to_value(response).unwrap_or_else(|_| {
+                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                                 })
                             }
                         }
@@ -223,12 +236,14 @@ impl RpcServer {
                             Ok(tx) => tx,
                             Err(e) => {
                                 error!("Failed to parse unsigned transaction parameters: {}", e);
-                                return serde_json::json!({
-                                    "error": {
-                                        "code": -32602,
-                                        "message": "Invalid parameters",
-                                        "data": e.to_string()
-                                    }
+                                let api_error = ApiError::with_details(
+                                    ApiErrorCode::InvalidUnsignedTransaction,
+                                    "Invalid unsigned transaction",
+                                    e.to_string()
+                                );
+                                let response = ApiResponse::error(api_error);
+                                return serde_json::to_value(response).unwrap_or_else(|_| {
+                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                                 });
                             }
                         };
@@ -242,12 +257,14 @@ impl RpcServer {
                             Ok(result) => result,
                             Err(e) => {
                                 error!("Failed to simulate unsigned transaction: {}", e);
-                                return serde_json::json!({
-                                    "error": {
-                                        "code": -32603,
-                                        "message": "Transaction simulation failed",
-                                        "data": e.to_string()
-                                    }
+                                let api_error = ApiError::with_details(
+                                    ApiErrorCode::TransactionSimulationFailed,
+                                    "Failed to simulate transaction",
+                                    e.to_string()
+                                );
+                                let response = ApiResponse::error(api_error);
+                                return serde_json::to_value(response).unwrap_or_else(|_| {
+                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                                 });
                             }
                         };
@@ -261,12 +278,14 @@ impl RpcServer {
                                         "Failed to parse L1 to L2 message events from receipt: {}",
                                         e
                                     );
-                                    return serde_json::json!({
-                                        "error": {
-                                            "code": -32604,
-                                            "message": "Failed to parse message events",
-                                            "data": e.to_string()
-                                        }
+                                    let api_error = ApiError::with_details(
+                                        ApiErrorCode::TransactionSimulationFailed,
+                                        "Failed to parse message events",
+                                        e.to_string()
+                                    );
+                                    let response = ApiResponse::error(api_error);
+                                    return serde_json::to_value(response).unwrap_or_else(|_| {
+                                        serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                                     });
                                 }
                             };
@@ -278,18 +297,21 @@ impl RpcServer {
                             .await
                         {
                             Ok(summary) => {
-                                serde_json::json!({
-                                    "result": summary
+                                let response = ApiResponse::success(summary);
+                                serde_json::to_value(response).unwrap_or_else(|_| {
+                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                                 })
                             }
                             Err(e) => {
                                 error!("L1 to L2 message fee estimation failed: {}", e);
-                                serde_json::json!({
-                                    "error": {
-                                        "code": -32603,
-                                        "message": "L1 to L2 message fee estimation failed",
-                                        "data": e.to_string()
-                                    }
+                                let api_error = ApiError::with_details(
+                                    ApiErrorCode::FeeEstimationFailed,
+                                    "Failed to estimate fee",
+                                    e.to_string()
+                                );
+                                let response = ApiResponse::error(api_error);
+                                serde_json::to_value(response).unwrap_or_else(|_| {
+                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
                                 })
                             }
                         }
