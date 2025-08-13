@@ -3,18 +3,96 @@ use reqwest::Client;
 use serde_json::{json, Value};
 use serial_test::serial;
 use std::net::SocketAddr;
+use std::process::{Child, Command};
+use std::sync::Mutex;
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
 
 const TEST_PORT: u16 = 18080;
 const TEST_HOST: &str = "127.0.0.1";
+const ANVIL_PORT: u16 = 8545;
+const ANVIL_HOST: &str = "127.0.0.1";
+
+// Global state to manage Anvil process
+static ANVIL_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
+
+/// Start Anvil node in the background
+async fn start_anvil_node() -> Result<(), Box<dyn std::error::Error>> {
+    // Check if anvil is already running by trying to connect
+    let client = Client::new();
+    let anvil_url = format!("http://{}:{}", ANVIL_HOST, ANVIL_PORT);
+
+    if let Ok(_) = client.post(&anvil_url).send().await {
+        println!("Anvil is already running on {}", anvil_url);
+        return Ok(());
+    }
+
+    println!("Starting Anvil node on {}:{}", ANVIL_HOST, ANVIL_PORT);
+
+    // Start anvil process
+    let child = Command::new("anvil")
+        .arg("--host")
+        .arg(ANVIL_HOST)
+        .arg("--port")
+        .arg(ANVIL_PORT.to_string())
+        .arg("--silent") // Reduce anvil output
+        .spawn()
+        .expect("Failed to start anvil process");
+
+    // Store the process handle globally
+    {
+        let mut process_guard = ANVIL_PROCESS.lock().unwrap();
+        *process_guard = Some(child);
+    }
+
+    // Wait for anvil to be ready
+    let mut attempts = 0;
+    let max_attempts = 30;
+
+    while attempts < max_attempts {
+        if let Ok(_) = client.post(&anvil_url).send().await {
+            println!("Anvil node is ready!");
+            return Ok(());
+        }
+        sleep(Duration::from_millis(100)).await;
+        attempts += 1;
+    }
+
+    Err("Failed to start Anvil node within timeout".into())
+}
+
+/// Stop Anvil node
+fn stop_anvil_node() {
+    let mut process_guard = ANVIL_PROCESS.lock().unwrap();
+    if let Some(mut child) = process_guard.take() {
+        println!("Stopping Anvil node...");
+        let _ = child.kill();
+        let _ = child.wait();
+        println!("Anvil node stopped.");
+    }
+}
+
+/// Setup function to ensure Anvil is running and start test server
+async fn setup_test_environment() -> SocketAddr {
+    // Start Anvil node
+    start_anvil_node()
+        .await
+        .expect("Failed to start Anvil node");
+
+    // Start test server
+    start_test_server().await
+}
 
 /// Test helper to start the server in the background
 async fn start_test_server() -> SocketAddr {
     let addr: SocketAddr = format!("{}:{}", TEST_HOST, TEST_PORT).parse().unwrap();
 
-    // Create server with test configuration
-    let server = RpcServer::new().expect("Failed to create RPC server");
+    // Create server with test configuration pointing to our Anvil node
+    let l1_rpc_url = format!("http://{}:{}", ANVIL_HOST, ANVIL_PORT);
+    let starknet_rpc_url = "https://pathfinder.rpc.sepolia.starknet.rs/rpc/v0_8".to_string();
+
+    let server = RpcServer::new_with_config(l1_rpc_url, starknet_rpc_url)
+        .expect("Failed to create RPC server");
 
     // Start the server in a background task
     tokio::spawn(async move {
@@ -48,6 +126,64 @@ async fn start_test_server() -> SocketAddr {
     addr
 }
 
+/// Validate API response structure - should have either success result or error
+fn validate_api_response(response: &Value) {
+    // Verify JSON-RPC structure
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 1);
+
+    // The response should contain a result field (JSON-RPC wrapper)
+    assert!(response.get("result").is_some());
+    let api_response = response.get("result").unwrap();
+
+    // Within the result, we should have either our success result or error, but not both
+    let has_success = api_response.get("result").is_some();
+    let has_error = api_response.get("error").is_some();
+
+    assert!(
+        has_success || has_error,
+        "Response must have either result or error"
+    );
+    assert!(
+        !(has_success && has_error),
+        "Response cannot have both result and error"
+    );
+
+    if has_error {
+        let error = api_response.get("error").unwrap();
+        println!("API Error: {}", error);
+
+        // Validate error structure
+        assert!(error.get("code").is_some());
+        assert!(error.get("message").is_some());
+
+        // The error code should be one of our defined ApiErrorCode values
+        let code = error.get("code").unwrap().as_str().unwrap();
+        assert!(matches!(
+            code,
+            "invalid_input_format"
+                | "invalid_unsigned_transaction"
+                | "invalid_signed_transaction"
+                | "transaction_simulation_failed"
+                | "fee_estimation_failed"
+                | "internal_error"
+        ));
+    } else if has_success {
+        let result = api_response.get("result").unwrap();
+        println!("API Success: {}", result);
+
+        // Validate the FeeEstimationSummary structure
+        assert!(result.is_object());
+        assert!(result.get("total_messages").is_some());
+        assert!(result.get("successful_estimates").is_some());
+        assert!(result.get("failed_estimates").is_some());
+        assert!(result.get("total_fee_wei").is_some());
+        assert!(result.get("total_fee_eth").is_some());
+        assert!(result.get("individual_estimates").is_some());
+        assert!(result.get("errors").is_some());
+    }
+}
+
 /// Send a JSON-RPC request to the server
 async fn send_rpc_request(method: &str, params: Value) -> Result<Value, reqwest::Error> {
     let client = Client::new();
@@ -74,7 +210,7 @@ async fn send_rpc_request(method: &str, params: Value) -> Result<Value, reqwest:
 #[tokio::test]
 #[serial]
 async fn test_estimate_l1_to_l2_message_fees() {
-    let _addr = start_test_server().await;
+    let _addr = setup_test_environment().await;
 
     // Test data for L1 to L2 message fees
     let params = json!([{
@@ -104,29 +240,14 @@ async fn test_estimate_l1_to_l2_message_fees() {
         serde_json::to_string_pretty(&response).unwrap()
     );
 
-    // Verify the response structure
-    assert_eq!(response["jsonrpc"], "2.0");
-    assert_eq!(response["id"], 1);
-
-    // The response should contain either a result or an error
-    assert!(response.get("result").is_some() || response.get("error").is_some());
-
-    if let Some(error) = response.get("error") {
-        println!("Expected error (likely due to test environment): {}", error);
-        // In a test environment, we might expect errors due to missing network connections
-        assert!(error.get("code").is_some());
-        assert!(error.get("message").is_some());
-    } else if let Some(result) = response.get("result") {
-        println!("Success result: {}", result);
-        // If successful, verify the result structure
-        assert!(result.is_object());
-    }
+    // Validate the response using our helper function
+    validate_api_response(&response);
 }
 
 #[tokio::test]
 #[serial]
 async fn test_estimate_l1_to_l2_message_fees_from_unsigned_tx() {
-    let _addr = start_test_server().await;
+    let _addr = setup_test_environment().await;
 
     // Test data for unsigned transaction
     let params = json!([{
@@ -160,28 +281,14 @@ async fn test_estimate_l1_to_l2_message_fees_from_unsigned_tx() {
         serde_json::to_string_pretty(&response).unwrap()
     );
 
-    // Verify the response structure
-    assert_eq!(response["jsonrpc"], "2.0");
-    assert_eq!(response["id"], 1);
-
-    // The response should contain either a result or an error
-    assert!(response.get("result").is_some() || response.get("error").is_some());
-
-    if let Some(error) = response.get("error") {
-        println!("Expected error (likely due to test environment): {}", error);
-        // In a test environment, we might expect errors due to missing network connections
-        assert!(error.get("code").is_some());
-        assert!(error.get("message").is_some());
-    } else if let Some(result) = response.get("result") {
-        println!("Success result: {}", result);
-        assert!(result.is_object());
-    }
+    // Validate the response using our helper function
+    validate_api_response(&response);
 }
 
 #[tokio::test]
 #[serial]
 async fn test_estimate_l1_to_l2_message_fees_from_signed_tx() {
-    let _addr = start_test_server().await;
+    let _addr = setup_test_environment().await;
 
     // Test data for signed transaction (this is a mock transaction hex)
     let params = json!(["0xf86c808509184e72a00082520894d46e8dd67c5d32be8058bb8eb970870f07244567849184e72aa9d46e8dd67c5d32be8d46e8dd67c5d32be8058bb8eb970870f072445678025a0c9cf86333bcb065d971d8e62a6b6b8b2c7c2e4b5a2e3a9e2b8c2e4b5a2e3a9e2c0"]);
@@ -199,28 +306,14 @@ async fn test_estimate_l1_to_l2_message_fees_from_signed_tx() {
         serde_json::to_string_pretty(&response).unwrap()
     );
 
-    // Verify the response structure
-    assert_eq!(response["jsonrpc"], "2.0");
-    assert_eq!(response["id"], 1);
-
-    // The response should contain either a result or an error
-    assert!(response.get("result").is_some() || response.get("error").is_some());
-
-    if let Some(error) = response.get("error") {
-        println!("Expected error (likely due to test environment): {}", error);
-        // In a test environment, we might expect errors due to missing network connections or invalid transaction
-        assert!(error.get("code").is_some());
-        assert!(error.get("message").is_some());
-    } else if let Some(result) = response.get("result") {
-        println!("Success result: {}", result);
-        assert!(result.is_object());
-    }
+    // Validate the response using our helper function
+    validate_api_response(&response);
 }
 
 #[tokio::test]
 #[serial]
 async fn test_invalid_method() {
-    let _addr = start_test_server().await;
+    let _addr = setup_test_environment().await;
 
     let params = json!([]);
 
@@ -249,7 +342,7 @@ async fn test_invalid_method() {
 #[tokio::test]
 #[serial]
 async fn test_malformed_request() {
-    let _addr = start_test_server().await;
+    let _addr = setup_test_environment().await;
 
     let client = Client::new();
     let url = format!("http://{}:{}", TEST_HOST, TEST_PORT);
@@ -282,7 +375,7 @@ async fn test_malformed_request() {
 #[tokio::test]
 #[serial]
 async fn test_invalid_parameters() {
-    let _addr = start_test_server().await;
+    let _addr = setup_test_environment().await;
 
     // Test with missing required parameters
     let params = json!([{
@@ -311,24 +404,23 @@ async fn test_invalid_parameters() {
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
 
-    // The server returns errors inside a result object due to the way JSON-RPC is handled
-    if let Some(result) = response.get("result") {
-        if let Some(error) = result.get("error") {
-            assert_eq!(error["code"], -32602); // Invalid params
-        } else {
-            panic!("Expected error in result, got: {}", result);
-        }
-    } else if let Some(error) = response.get("error") {
-        assert_eq!(error["code"], -32602); // Invalid params
-    } else {
-        panic!("Expected error response, got: {}", response);
-    }
+    // With the new API format, we expect a standardized error response inside the result
+    assert!(response.get("result").is_some());
+    let api_response = response.get("result").unwrap();
+    assert!(api_response.get("error").is_some());
+    let error = api_response.get("error").unwrap();
+    assert!(error.get("code").is_some());
+    assert!(error.get("message").is_some());
+
+    // Should be an invalid_input_format error
+    let code = error.get("code").unwrap().as_str().unwrap();
+    assert_eq!(code, "invalid_input_format");
 }
 
 #[tokio::test]
 #[serial]
 async fn test_unsigned_tx_missing_from_field() {
-    let _addr = start_test_server().await;
+    let _addr = setup_test_environment().await;
 
     // Test unsigned transaction without required 'from' field
     let params = json!([{
@@ -354,24 +446,23 @@ async fn test_unsigned_tx_missing_from_field() {
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
 
-    // The server returns errors inside a result object due to the way JSON-RPC is handled
-    if let Some(result) = response.get("result") {
-        if let Some(error) = result.get("error") {
-            assert_eq!(error["code"], -32602); // Invalid params
-        } else {
-            panic!("Expected error in result, got: {}", result);
-        }
-    } else if let Some(error) = response.get("error") {
-        assert_eq!(error["code"], -32602); // Invalid params
-    } else {
-        panic!("Expected error response, got: {}", response);
-    }
+    // With the new API format, we expect a standardized error response inside the result
+    assert!(response.get("result").is_some());
+    let api_response = response.get("result").unwrap();
+    assert!(api_response.get("error").is_some());
+    let error = api_response.get("error").unwrap();
+    assert!(error.get("code").is_some());
+    assert!(error.get("message").is_some());
+
+    // Should be an invalid_unsigned_transaction error since it's missing the 'from' field
+    let code = error.get("code").unwrap().as_str().unwrap();
+    assert_eq!(code, "invalid_unsigned_transaction");
 }
 
 #[tokio::test]
 #[serial]
 async fn test_server_health() {
-    let _addr = start_test_server().await;
+    let _addr = setup_test_environment().await;
 
     // Test basic connectivity to ensure server is running
     let client = Client::new();
@@ -406,4 +497,13 @@ async fn test_server_health() {
     // Should have proper JSON-RPC structure
     assert_eq!(response_json["jsonrpc"], "2.0");
     assert_eq!(response_json["id"], 1);
+}
+
+/// Cleanup test that runs last to stop Anvil
+#[tokio::test]
+#[serial]
+async fn test_z_cleanup() {
+    println!("Cleaning up test environment...");
+    stop_anvil_node();
+    println!("Test cleanup completed.");
 }

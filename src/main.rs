@@ -1,3 +1,4 @@
+mod api;
 mod config;
 mod fee_estimator;
 mod server;
