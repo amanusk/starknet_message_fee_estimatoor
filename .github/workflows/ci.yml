@@ -85,7 +85,7 @@ jobs:
           version: nightly
 
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test 
         env:
           RUST_LOG: debug
 
