@@ -2,7 +2,7 @@ use eyre::{eyre, Report as ErrReport, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
-use tracing::{info, warn};
+use tracing::info;
 
 use alloy::{
     consensus::TxEnvelope,
@@ -14,7 +14,7 @@ use alloy::{
     sol_types::SolEvent,
 };
 
-use starknet::core::types::Felt;
+use starknet::core::types::{EthAddress, Felt};
 
 /// Represents the result of a transaction simulation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,8 +52,6 @@ pub struct TransactionData {
 /// Main transaction simulator struct
 #[derive(Debug)]
 pub struct TransactionSimulator {
-    // Configuration and state will be added here
-    #[allow(dead_code)]
     network_config: NetworkConfig,
 }
 
@@ -73,12 +71,13 @@ sol!(
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct L1ToL2MessageSentEvent {
+    pub from_address: EthAddress,
     pub l2_address: Felt,
     pub selector: Felt,
     pub payload: Vec<Felt>,
 }
 
-#[allow(dead_code)]
+/// Simulate a transaction using Anvil and return gas used
 pub async fn simulate_tx(rpc_url: &str, target_tx: &TxEnvelope) -> Result<u64, ErrReport> {
     let anvil = Anvil::new()
         .arg("--fork-url")
@@ -95,9 +94,8 @@ pub async fn simulate_tx(rpc_url: &str, target_tx: &TxEnvelope) -> Result<u64, E
     Ok(gas_used)
 }
 
-// Test helper function that returns receipt for event inspection
-#[allow(dead_code)]
-async fn simulate_tx_with_receipt(
+/// Simulate a transaction and return both gas used and receipt for event inspection
+pub async fn simulate_tx_with_receipt(
     rpc_url: &str,
     target_tx: &TxEnvelope,
 ) -> Result<(u64, alloy::rpc::types::TransactionReceipt), ErrReport> {
@@ -124,6 +122,7 @@ fn parse_starknet_l1_to_l2_message_sent_events(
         .iter()
         .filter_map(|log| StarknetCore::LogMessageToL2::decode_log(log.as_ref()).ok())
         .map(|l1_to_l2_log| L1ToL2MessageSentEvent {
+            from_address: EthAddress::from_str(&l1_to_l2_log.fromAddress.to_string()).unwrap(),
             l2_address: Felt::from_str(&l1_to_l2_log.toAddress.to_string()).unwrap(),
             selector: Felt::from_str(&l1_to_l2_log.selector.to_string()).unwrap(),
             payload: l1_to_l2_log
@@ -141,8 +140,8 @@ fn parse_starknet_l1_to_l2_message_sent_events(
     Ok(decoded_events)
 }
 
-#[allow(dead_code)]
-fn print_transaction_events(receipt: &alloy::rpc::types::TransactionReceipt) {
+/// Print detailed transaction events from a receipt (useful for debugging)
+pub fn print_transaction_events(receipt: &alloy::rpc::types::TransactionReceipt) {
     println!("Transaction Events:");
     println!("==================");
     let logs = receipt.logs();
@@ -173,11 +172,7 @@ fn print_transaction_events(receipt: &alloy::rpc::types::TransactionReceipt) {
 
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {
-    #[allow(dead_code)]
     pub l1_rpc_url: String,
-    #[allow(dead_code)]
-    pub l2_rpc_url: String,
-    #[allow(dead_code)]
     pub block_number: Option<u64>,
 }
 
@@ -189,11 +184,35 @@ impl TransactionSimulator {
             network_config
         );
 
-        // TODO: Validate network configuration
-        // TODO: Initialize RPC clients
-        // TODO: Set up simulation environment
+        // Validate network configuration
+        if network_config.l1_rpc_url.is_empty() {
+            return Err(eyre!("L1 RPC URL cannot be empty"));
+        }
 
         Ok(Self { network_config })
+    }
+
+    /// Simulate a transaction envelope using the L1 RPC
+    pub async fn simulate_tx_envelope(&self, target_tx: &TxEnvelope) -> Result<u64> {
+        info!("Simulating transaction envelope");
+        simulate_tx(&self.network_config.l1_rpc_url, target_tx).await
+    }
+
+    /// Simulate a transaction envelope and return both gas used and receipt
+    pub async fn simulate_tx_envelope_with_receipt(
+        &self,
+        target_tx: &TxEnvelope,
+    ) -> Result<(u64, alloy::rpc::types::TransactionReceipt)> {
+        info!("Simulating transaction envelope with receipt");
+        simulate_tx_with_receipt(&self.network_config.l1_rpc_url, target_tx).await
+    }
+
+    /// Parse Starknet L1 to L2 message events from a transaction receipt
+    pub fn parse_l1_to_l2_message_events(
+        &self,
+        receipt: &alloy::rpc::types::TransactionReceipt,
+    ) -> Result<Vec<L1ToL2MessageSentEvent>> {
+        parse_starknet_l1_to_l2_message_sent_events(receipt)
     }
 
     /// Simulate a transaction and return the result
@@ -202,9 +221,6 @@ impl TransactionSimulator {
         transaction: TransactionData,
     ) -> Result<SimulationResult> {
         info!("Starting transaction simulation for tx: {:?}", transaction);
-
-        // TODO: Implement actual simulation logic
-        // This is a placeholder implementation
 
         // Validate transaction data
         self.validate_transaction(&transaction)?;
@@ -220,12 +236,7 @@ impl TransactionSimulator {
     pub async fn estimate_fee(&self, transaction: TransactionData) -> Result<u64> {
         info!("Estimating fee for transaction: {:?}", transaction);
 
-        // TODO: Implement actual fee estimation logic
-        // This is a placeholder implementation
-
         let simulation_result = self.simulate_transaction(transaction).await?;
-
-        // For now, return a placeholder gas estimate
         let estimated_gas = simulation_result.gas_used;
 
         info!("Estimated gas: {}", estimated_gas);
@@ -234,12 +245,6 @@ impl TransactionSimulator {
 
     /// Validate transaction data before simulation
     fn validate_transaction(&self, transaction: &TransactionData) -> Result<()> {
-        // TODO: Implement comprehensive validation
-        // - Check address formats
-        // - Validate gas limits
-        // - Check value amounts
-        // - Validate nonce
-
         if transaction.from.is_empty() {
             return Err(eyre!(
                 "Invalid transaction data: From address cannot be empty"
@@ -252,49 +257,45 @@ impl TransactionSimulator {
             ));
         }
 
-        // TODO: Add more validation rules
+        // Validate address format for 'from' field
+        if !transaction.from.starts_with("0x") || transaction.from.len() != 42 {
+            return Err(eyre!("Invalid from address format: {}", transaction.from));
+        }
+
+        // Validate 'to' address if present
+        if let Some(to) = &transaction.to {
+            if !to.starts_with("0x") || to.len() != 42 {
+                return Err(eyre!("Invalid to address format: {}", to));
+            }
+        }
 
         Ok(())
     }
 
     /// Execute the actual simulation
-    async fn execute_simulation(&self, _transaction: TransactionData) -> Result<SimulationResult> {
-        // TODO: Implement the core simulation logic
-        // This will include:
-        // - Setting up simulation environment
-        // - Executing transaction against state
-        // - Collecting gas usage, events, state changes
-        // - Handling errors and reverts
+    async fn execute_simulation(&self, transaction: TransactionData) -> Result<SimulationResult> {
+        // For now, this is a simplified implementation that returns estimated values
+        // In a full implementation, this would use the Anvil simulation infrastructure
+        // to execute the transaction and collect detailed results
 
-        warn!("Simulation logic not yet implemented - returning placeholder result");
+        // Basic gas estimation based on transaction type
+        let base_gas = 21000u64; // Base transaction cost
+        let data_gas = transaction.data.len() as u64 * 16; // Rough data cost estimation
+        let estimated_gas = base_gas + data_gas;
 
-        // Placeholder result
+        info!(
+            "Executing simulation for transaction with estimated gas: {}",
+            estimated_gas
+        );
+
         Ok(SimulationResult {
             success: true,
-            gas_used: 21000, // Default gas for simple transfer
+            gas_used: estimated_gas,
             return_data: vec![],
             events: vec![],
             state_changes: HashMap::new(),
             error_message: None,
         })
-    }
-
-    /// Get current network configuration
-    #[allow(dead_code)]
-    pub fn get_network_config(&self) -> &NetworkConfig {
-        &self.network_config
-    }
-
-    /// Update network configuration
-    #[allow(dead_code)]
-    pub fn update_network_config(&mut self, config: NetworkConfig) -> Result<()> {
-        info!("Updating network configuration: {:?}", config);
-
-        // TODO: Validate new configuration
-        // TODO: Reconnect to new networks if needed
-
-        self.network_config = config;
-        Ok(())
     }
 }
 
@@ -302,7 +303,6 @@ impl Default for NetworkConfig {
     fn default() -> Self {
         Self {
             l1_rpc_url: "http://localhost:8545".to_string(),
-            l2_rpc_url: "http://localhost:5050".to_string(),
             block_number: None,
         }
     }
@@ -397,11 +397,16 @@ mod tests {
 
         let funding_tx_envelope = TxEnvelope::new_unhashed(funding_tx.into(), signature);
 
-        // Use the same Anvil endpoint URL for forking in simulate_tx
-        let rpc_url = anvil.endpoint_url();
+        // Create a TransactionSimulator with the Anvil endpoint
+        let config = NetworkConfig {
+            l1_rpc_url: anvil.endpoint_url().to_string(),
+            block_number: None,
+        };
+        let simulator = TransactionSimulator::new(config).unwrap();
 
-        // Test the simulate_tx function
-        let gas_used = simulate_tx(rpc_url.as_str(), &funding_tx_envelope)
+        // Test the simulate_tx_envelope method
+        let gas_used = simulator
+            .simulate_tx_envelope(&funding_tx_envelope)
             .await
             .unwrap();
 
@@ -490,8 +495,17 @@ mod tests {
         // Use the same Anvil endpoint URL for forking in simulate_tx
         let rpc_url = anvil.endpoint_url();
 
-        // Test the simulate_tx function with contract interaction
-        let (gas_used, receipt) = simulate_tx_with_receipt(rpc_url.as_str(), &contract_tx_envelope)
+        // Create a TransactionSimulator with the Anvil endpoint
+        let config = NetworkConfig {
+            l1_rpc_url: rpc_url.to_string(),
+
+            block_number: None,
+        };
+        let simulator = TransactionSimulator::new(config).unwrap();
+
+        // Test the simulate_tx_envelope_with_receipt method
+        let (gas_used, receipt) = simulator
+            .simulate_tx_envelope_with_receipt(&contract_tx_envelope)
             .await
             .unwrap();
 
@@ -546,22 +560,31 @@ mod tests {
         // Use the same Anvil endpoint URL for forking in simulate_tx
         let rpc_url = anvil.endpoint_url();
 
-        // Test the simulate_tx function with contract interaction
-        let (_gas_used, receipt) =
-            simulate_tx_with_receipt(rpc_url.as_str(), &contract_tx_envelope)
-                .await
-                .unwrap();
+        // Create a TransactionSimulator with the Anvil endpoint
+        let config = NetworkConfig {
+            l1_rpc_url: rpc_url.to_string(),
+
+            block_number: None,
+        };
+        let simulator = TransactionSimulator::new(config).unwrap();
+
+        // Test the simulate_tx_envelope_with_receipt method
+        let (_gas_used, receipt) = simulator
+            .simulate_tx_envelope_with_receipt(&contract_tx_envelope)
+            .await
+            .unwrap();
 
         // Print all events emitted by the transaction
         print_transaction_events(&receipt);
 
-        let l1_to_l2_logs = parse_starknet_l1_to_l2_message_sent_events(&receipt).unwrap();
+        let l1_to_l2_logs = simulator.parse_l1_to_l2_message_events(&receipt).unwrap();
         println!(
             "Found {} L1 to L2 message sent events:",
             l1_to_l2_logs.len()
         );
         for (i, log) in l1_to_l2_logs.iter().enumerate() {
             println!("  Event {}:", i + 1);
+            println!("    from_address: {:?}", log.from_address);
             println!("    to_address: {}", log.l2_address);
             println!("    selector: {}", log.selector);
             println!("    payload: {:?}", log.payload);
@@ -578,6 +601,9 @@ mod tests {
 
         let event = &l1_to_l2_logs[0];
 
+        let expected_from_address =
+            EthAddress::from_hex("0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4").unwrap();
+
         // Expected values based on the actual decoded event output
         // to_address: Convert from decimal output we see: 2524392021852001135582825949054576525094493216367559068627275826195272239197
         let expected_to_address = Felt::from_str(
@@ -589,6 +615,8 @@ mod tests {
             "774397379524139446221206168840917193112228400237242521560346153613428128537",
         )
         .unwrap();
+
+        assert_eq!(event.from_address, expected_from_address);
 
         // Assert the to_address matches expected value
         assert_eq!(
@@ -641,4 +669,8 @@ mod tests {
             );
         }
     }
+
+    // TODO: add test with two events
+
+    // TODO: add test with no events
 }
