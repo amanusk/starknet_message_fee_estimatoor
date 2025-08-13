@@ -64,22 +64,24 @@ Estimates fees for a list of L1 to L2 message events.
 {
   "jsonrpc": "2.0",
   "result": {
-    "total_messages": 1,
-    "successful_estimates": 1,
-    "failed_estimates": 0,
-    "total_fee_wei": 123456789000000,
-    "total_fee_eth": 0.000123456789,
-    "individual_estimates": [
-      {
-        "l2_address": "0x059dac5df32cbce17b081399e97d90be5fba726f97f00638f838613d088e5a47",
-        "selector": "0x01b755de86a18a8a0d2b5a4b0b2f40c3c584c2e45df20e8c0de5db20a6c4fb7",
-        "gas_consumed": 123456,
-        "gas_price": 1000000000,
-        "overall_fee": 123456789000000,
-        "unit": "Wei"
-      }
-    ],
-    "errors": []
+    "result": {
+      "errors": [],
+      "failed_estimates": 0,
+      "individual_estimates": [
+        {
+          "gas_consumed": 20180,
+          "gas_price": 6381820900,
+          "l2_address": "0x594c1582459ea03f77deaf9eb7e3917d6994a03c13405ba42867f83d85f085d",
+          "overall_fee": 128785145762192,
+          "selector": "0x1b64b1b3b690b43b9b514fb81377518f4039cd3e4f4914d8a6bdf01d679fb19",
+          "unit": "Wei"
+        }
+      ],
+      "successful_estimates": 1,
+      "total_fee_eth": 0.000128785145762192,
+      "total_fee_wei": 128785145762192,
+      "total_messages": 1
+    }
   },
   "id": 1
 }
@@ -93,59 +95,24 @@ Estimates fees for a list of L1 to L2 message events.
 curl -X POST http://localhost:8080 \
   -H "Content-Type: application/json" \
   -d '{
-    "jsonrpc": "2.0",
-    "method": "estimate_l1_to_l2_message_fees",
-    "params": [
-      {
         "messages": [
           {
-            "l2_address": "0x059dac5df32cbce17b081399e97d90be5fba726f97f00638f838613d088e5a47",
-            "selector": "0x01b755de86a18a8a0d2b5a4b0b2f40c3c584c2e45df20e8c0de5db20a6c4fb7",
+            "from_address": "0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4",
+            "l2_address": "0x594c1582459ea03f77deaf9eb7e3917d6994a03c13405ba42867f83d85f085d",
+            "selector": "0x1b64b1b3b690b43b9b514fb81377518f4039cd3e4f4914d8a6bdf01d679fb19",
             "payload": [
               "0xca14007eff0db1f8135f4c25b34de49ab0d42766",
-              "0x4f9c6a3ec958b0de0000"
+              "0x11dd734a52cd2ee23ffe8b5054f5a8ecf5d1ad50",
+              "0x13cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1",
+              "0x4f9c6a3ec958b0de0000",
+              "0x0"
             ]
           }
         ]
       }
     ],
     "id": 1
-  }'
-```
-
-### Using JavaScript/Node.js
-
-```javascript
-const response = await fetch("http://localhost:8080", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    jsonrpc: "2.0",
-    method: "estimate_l1_to_l2_message_fees",
-    params: [
-      {
-        messages: [
-          {
-            l2_address:
-              "0x059dac5df32cbce17b081399e97d90be5fba726f97f00638f838613d088e5a47",
-            selector:
-              "0x01b755de86a18a8a0d2b5a4b0b2f40c3c584c2e45df20e8c0de5db20a6c4fb7",
-            payload: [
-              "0xca14007eff0db1f8135f4c25b34de49ab0d42766",
-              "0x4f9c6a3ec958b0de0000",
-            ],
-          },
-        ],
-      },
-    ],
-    id: 1,
-  }),
-});
-
-const result = await response.json();
-console.log("Fee estimation result:", result.result);
+}'
 ```
 
 ## Response Fields
@@ -185,62 +152,3 @@ The service will start on `http://127.0.0.1:8080` by default.
 ## Unsigned Transaction Simulation
 
 The library also provides functionality to simulate unsigned transactions using account impersonation. This is useful for testing and gas estimation without needing private keys.
-
-### Usage Example
-
-```rust
-use eyre::Result;
-use estimate_starknet_message_fee::simulator::{
-    NetworkConfig, TransactionSimulator, UnsignedTransactionData,
-};
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Create a network configuration
-    let config = NetworkConfig {
-        l1_rpc_url: "https://eth.llamarpc.com".to_string(),
-        block_number: None,
-    };
-
-    // Create a transaction simulator
-    let simulator = TransactionSimulator::new(config)?;
-
-    // Create unsigned transaction data
-    let unsigned_tx = UnsignedTransactionData {
-        from: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266".to_string(),
-        to: Some("0x70997970C51812dc3A010C7d01b50e0d17dc79C8".to_string()),
-        value: "1000000000000000000".to_string(), // 1 ETH
-        data: vec![],
-        gas_limit: Some(21000),
-        gas_price: Some("20000000000".to_string()), // 20 gwei
-        max_fee_per_gas: None,
-        max_priority_fee_per_gas: None,
-        nonce: None,
-    };
-
-    // Simulate the transaction
-    let (gas_used, receipt) = simulator
-        .simulate_unsigned_tx_with_receipt(&unsigned_tx)
-        .await?;
-
-    println!("Gas used: {}", gas_used);
-    println!("Transaction hash: {:?}", receipt.transaction_hash);
-
-    Ok(())
-}
-```
-
-### Features
-
-- **Account Impersonation**: Simulate transactions from any address without private keys
-- **Fork Simulation**: Executes on a fork of the current mainnet state
-- **Gas Estimation**: Returns accurate gas usage for the transaction
-- **Receipt Analysis**: Full transaction receipt for event inspection
-- **EIP-1559 Support**: Supports both legacy and EIP-1559 fee structures
-
-### Use Cases
-
-- Testing smart contract interactions
-- Gas estimation for transaction planning
-- Simulating complex DeFi operations
-- Analyzing transaction effects without broadcasting
