@@ -161,3 +161,4 @@ The simulator is designed with placeholder implementations that can be filled in
 - [ ] Set possible errors returned from the server
 - [ ] Publish as a crate and library
 - [ ] More test coverage for possible failures and edge cases
+- [ ] Run benchmarks and stress tests
