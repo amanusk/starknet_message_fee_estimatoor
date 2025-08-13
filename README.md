@@ -55,81 +55,125 @@ export APP_STARKNET_ENDPOINT=https://starknet-mainnet.public.blastapi.io
 
 ### Available Methods
 
-#### `estimate_fee`
+#### `estimate_l1_to_l2_message_fees`
 
-Estimates the cost of Starknet operations triggered by an Ethereum transaction.
-
-**Request:**
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "estimate_fee",
-  "params": {
-    "transaction": "0x...",
-    "signed": true
-  },
-  "id": 1
-}
-```
-
-**Response:**
-
-```json
-{
-  "jsonrpc": "2.0",
-  "result": {
-    "status": "success",
-    "message": "Fee estimation not yet implemented"
-  },
-  "id": 1
-}
-```
-
-#### `simulate_transaction`
-
-Simulates an Ethereum transaction and extracts relevant events.
+Estimates fees for L1 to L2 message events directly.
 
 **Request:**
 
 ```json
 {
   "jsonrpc": "2.0",
-  "method": "simulate_transaction",
-  "params": {
-    "transaction": "0x...",
-    "signed": false
-  },
-  "id": 2
+  "method": "estimate_l1_to_l2_message_fees",
+  "params": [
+    {
+      "messages": [
+        {
+          "from_address": "0x8453FC6Cd1bCfE8D4dFC069C400B433054d47bDc",
+          "l2_address": "0x04c5772d1914fe6ce891b64eb35bf3522aeae1315647314aac58b01137607f3f",
+          "selector": "0x02d757788a8d8d6f21d1cd40bce38a8222d70654214e96ff95d8086e684fbee5",
+          "payload": [
+            "0x0000000000000000000000008453FC6Cd1bCfE8D4dFC069C400B433054d47bDc",
+            "0x00000000000000000000000000000000000000000000000000000000000003e8"
+          ]
+        }
+      ]
+    }
+  ],
+  "id": 1
 }
 ```
 
-**Response:**
+#### `estimate_l1_to_l2_message_fees_from_unsigned_tx`
+
+Estimates fees by simulating an unsigned Ethereum transaction and extracting L1 to L2 messages.
+
+**Request:**
 
 ```json
 {
   "jsonrpc": "2.0",
-  "result": {
-    "status": "success",
-    "message": "Transaction simulation not yet implemented"
-  },
+  "method": "estimate_l1_to_l2_message_fees_from_unsigned_tx",
+  "params": [
+    {
+      "from": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "to": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+      "value": "1000000000000000000",
+      "gas": 21000,
+      "gasPrice": "20000000000"
+    }
+  ],
   "id": 2
+}
+```
+
+#### `estimate_l1_to_l2_message_fees_from_signed_tx`
+
+Estimates fees by simulating a signed Ethereum transaction and extracting L1 to L2 messages.
+
+**Request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "estimate_l1_to_l2_message_fees_from_signed_tx",
+  "params": ["0xf86c808509184e72a00082520894..."],
+  "id": 3
 }
 ```
 
 ### Testing the API
 
 ```bash
-# Test estimate_fee
+# Test unsigned transaction fee estimation
 curl -X POST -H "Content-Type: application/json" \
-  --data '{"jsonrpc":"2.0","method":"estimate_fee","params":{"transaction":"0x123"},"id":1}' \
+  --data '{"jsonrpc":"2.0","method":"estimate_l1_to_l2_message_fees_from_unsigned_tx","params":[{"from":"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266","to":"0x70997970C51812dc3A010C7d01b50e0d17dc79C8","value":"1000000000000000000","gas":21000,"gasPrice":"20000000000"}],"id":1}' \
   http://127.0.0.1:8080
 
-# Test simulate_transaction
+# Test direct message fee estimation
 curl -X POST -H "Content-Type: application/json" \
-  --data '{"jsonrpc":"2.0","method":"simulate_transaction","params":{"transaction":"0x456"},"id":2}' \
+  --data '{"jsonrpc":"2.0","method":"estimate_l1_to_l2_message_fees","params":[{"messages":[{"from_address":"0x8453FC6Cd1bCfE8D4dFC069C400B433054d47bDc","l2_address":"0x04c5772d1914fe6ce891b64eb35bf3522aeae1315647314aac58b01137607f3f","selector":"0x02d757788a8d8d6f21d1cd40bce38a8222d70654214e96ff95d8086e684fbee5","payload":["0x0000000000000000000000008453FC6Cd1bCfE8D4dFC069C400B433054d47bDc","0x00000000000000000000000000000000000000000000000000000000000003e8"]}]}],"id":2}' \
   http://127.0.0.1:8080
 ```
+
+## Examples and Testing
+
+### Running Examples
+
+The project includes several examples to demonstrate usage:
+
+```bash
+# Run the server with example usage
+cargo run --example server_usage_example
+
+# Run the client example (requires server to be running)
+cargo run --example client_example
+
+# Run the original unsigned transaction example
+cargo run --example unsigned_transaction_example
+```
+
+### Running Tests
+
+Run the integration tests to verify the server functionality:
+
+```bash
+# Run all tests
+cargo test
+
+# Run only integration tests
+cargo test --test integration_tests
+
+# Run tests with output
+cargo test -- --nocapture
+```
+
+The integration tests will:
+
+- Start the server automatically
+- Test all API endpoints
+- Verify error handling
+- Check response formats
 
 ## Architecture
 
