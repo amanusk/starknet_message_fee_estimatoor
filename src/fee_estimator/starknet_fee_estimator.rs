@@ -17,7 +17,7 @@ pub struct StarknetFeeEstimatorConfig {
 impl Default for StarknetFeeEstimatorConfig {
     fn default() -> Self {
         Self {
-            rpc_url: "https://starknet-mainnet.public.blastapi.io".to_string(),
+            rpc_url: "https://pathfinder.rpc.mainnet.starknet.rs/rpc/v0_8".to_string(),
             block_id: BlockId::Tag(BlockTag::Latest),
         }
     }
@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn test_fee_estimator_from_url() {
         let estimator =
-            StarknetFeeEstimator::from_url("https://starknet-mainnet.public.blastapi.io");
+            StarknetFeeEstimator::from_url("https://pathfinder.rpc.mainnet.starknet.rs/rpc/v0_8");
         assert!(estimator.is_ok());
     }
 
@@ -219,7 +219,8 @@ mod tests {
     #[tokio::test]
     async fn test_empty_events_list() {
         let estimator =
-            StarknetFeeEstimator::from_url("https://starknet-mainnet.public.blastapi.io").unwrap();
+            StarknetFeeEstimator::from_url("https://pathfinder.rpc.mainnet.starknet.rs/rpc/v0_8")
+                .unwrap();
         let result = estimator.estimate_messages_fee(vec![]).await.unwrap();
 
         assert_eq!(result.total_messages, 0);
@@ -249,16 +250,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_estimate_single_message_fee() {
-        let estimator =
-            StarknetFeeEstimator::from_url("https://starknet-mainnet.public.blastapi.io/rpc/v0_8")
-                .unwrap();
-    }
-
-    #[tokio::test]
     async fn test_single_message_fee_estimation() {
         use starknet::core::types::{EthAddress, Felt};
         use std::str::FromStr;
+
+        // Create fee estimator with Starknet mainnet endpoint
+        let estimator =
+            StarknetFeeEstimator::from_url("https://pathfinder.rpc.mainnet.starknet.rs/rpc/v0_8")
+                .unwrap();
 
         // Create a test message using values from the actual Starknet deposit transaction
         // These values are extracted from the test_starknet_deposit_tx test in transaction_simulator.rs
@@ -283,30 +282,55 @@ mod tests {
             ],
         };
 
-        // Create fee estimator with Starknet mainnet endpoint
-        let estimator =
-            StarknetFeeEstimator::from_url("https://starknet-mainnet.public.blastapi.io/rpc/v0_8")
-                .unwrap();
-
         // Estimate fee for the single message
         let result = estimator.estimate_single_message_fee(&test_event).await;
 
-        assert!(
-            result.is_ok(),
-            "Fee estimation should succeed for a valid message"
-        );
+        // Assert that the result is Ok
+        assert!(result.is_ok(), "Fee estimation should succeed");
+
         let estimate = result.unwrap();
+
+        // Verify that the estimate contains correct values
         assert_eq!(estimate.l2_address, test_event.l2_address);
         assert_eq!(estimate.selector, test_event.selector);
-        assert!(
-            estimate.gas_consumed > 0,
-            "Gas consumed should be greater than 0"
-        );
-        assert!(estimate.gas_price > 0, "Gas price should be greater than 0");
-        assert!(
-            estimate.overall_fee > 0,
-            "Overall fee should be greater than 0"
-        );
-        assert!(!estimate.unit.is_empty(), "Unit should not be empty");
+        assert!(estimate.gas_consumed > 0);
+        assert!(estimate.gas_price > 0);
+        assert!(estimate.overall_fee > 0);
+        assert!(!estimate.unit.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_jsonrpc_estimate_message_fee_sanity_check() {
+        let rpc_url = std::env::var("STARKNET_RPC")
+            .unwrap_or_else(|_| "https://pathfinder.rpc.sepolia.starknet.rs/rpc/v0_8".into());
+        let rpc_client = JsonRpcClient::new(HttpTransport::new(Url::parse(&rpc_url).unwrap()));
+
+        let estimate = rpc_client
+            .estimate_message_fee(
+                MsgFromL1 {
+                    from_address: EthAddress::from_hex(
+                        "0x8453FC6Cd1bCfE8D4dFC069C400B433054d47bDc",
+                    )
+                    .unwrap(),
+                    to_address: Felt::from_hex(
+                        "04c5772d1914fe6ce891b64eb35bf3522aeae1315647314aac58b01137607f3f",
+                    )
+                    .unwrap(),
+                    entry_point_selector: Felt::from_hex(
+                        "02d757788a8d8d6f21d1cd40bce38a8222d70654214e96ff95d8086e684fbee5",
+                    )
+                    .unwrap(),
+                    payload: vec![Felt::ONE, Felt::ONE, Felt::ONE],
+                },
+                BlockId::Tag(BlockTag::Latest),
+            )
+            .await
+            .unwrap();
+
+        println!("estimate: {:?}", estimate);
+
+        assert!(estimate.l1_gas_consumed > 0);
+        assert!(estimate.l1_gas_price > 0);
+        assert!(estimate.overall_fee > 0);
     }
 }
