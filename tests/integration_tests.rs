@@ -478,7 +478,7 @@ async fn test_estimate_l1_to_l2_message_fees_error_cases() {
 
 #[tokio::test]
 #[serial]
-async fn test_estimate_l1_to_l2_message_fees_from_unsigned_tx_success() {
+async fn test_estimate_l1_to_l2_message_fees_from_unsigned_tx_realistic() {
     let _addr = setup_test_environment().await;
 
     // Test data using the exact same unsigned transaction from unit tests
@@ -502,12 +502,13 @@ async fn test_estimate_l1_to_l2_message_fees_from_unsigned_tx_success() {
     .expect("Request failed");
 
     println!(
-        "estimate_l1_to_l2_message_fees_from_unsigned_tx_success response: {}",
+        "estimate_l1_to_l2_message_fees_from_unsigned_tx_realistic response: {}",
         serde_json::to_string_pretty(&response).unwrap()
     );
 
-    // This test expects a transaction simulation error due to insufficient funds
-    validate_expected_error(&response, "transaction_simulation_failed");
+    // This test can handle either success or error gracefully
+    // In different environments (CI vs local), the account may or may not have sufficient funds
+    validate_api_response(&response);
 }
 
 #[tokio::test]
@@ -540,6 +541,40 @@ async fn test_estimate_l1_to_l2_message_fees_from_unsigned_tx_error() {
 
     // This test can handle either success or error gracefully
     validate_api_response(&response);
+}
+
+#[tokio::test]
+#[serial]
+async fn test_estimate_l1_to_l2_message_fees_from_unsigned_tx_insufficient_gas() {
+    let _addr = setup_test_environment().await;
+
+    // Test data using a realistic Starknet deposit transaction but with insufficient gas
+    // This guarantees a transaction simulation failure regardless of account balance
+    let params = json!([{
+        "from": "0x11Dd734a52Cd2EE23FFe8B5054F5A8ECF5D1Ad50", // Original sender
+        "to": "0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4", // Starknet Core contract
+        "value": "25344429452040", // Value in wei from original tx
+        "data": "0x0efe6a8b000000000000000000000000ca14007eff0db1f8135f4c25b34de49ab0d42766000000000000000000000000000000000000000000004f9c6a3ec958b0de0000013cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1",
+        "gas": 1000, // Deliberately too low gas limit (normal is ~190674)
+        "gasPrice": "2306574200", // Gas price from original tx
+        "nonce": 58 // Nonce from original tx
+    }]);
+
+    let response = timeout(
+        Duration::from_secs(30),
+        send_rpc_request("estimate_l1_to_l2_message_fees_from_unsigned_tx", params),
+    )
+    .await
+    .expect("Request timeout")
+    .expect("Request failed");
+
+    println!(
+        "estimate_l1_to_l2_message_fees_from_unsigned_tx_insufficient_gas response: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
+
+    // This test expects a transaction simulation error due to insufficient gas
+    validate_expected_error(&response, "transaction_simulation_failed");
 }
 
 #[tokio::test]
