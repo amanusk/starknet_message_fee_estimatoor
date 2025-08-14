@@ -280,6 +280,169 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_double_deposit_fee_estimation() {
+        use starknet::core::types::{EthAddress, Felt};
+        use std::str::FromStr;
+
+        // Create fee estimator with Starknet mainnet endpoint
+        let estimator =
+            StarknetFeeEstimator::from_url("https://pathfinder.rpc.mainnet.starknet.rs/rpc/v0_8")
+                .unwrap();
+
+        // Create the first test message using values from the actual Starknet deposit transaction
+        // These values are extracted from the test_starknet_deposit_tx test in transaction_simulator.rs
+        let test_event_1 = L1ToL2MessageSentEvent {
+            from_address: EthAddress::from_str("0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4")
+                .unwrap(),
+            l2_address: Felt::from_str(
+                "2524392021852001135582825949054576525094493216367559068627275826195272239197",
+            )
+            .unwrap(),
+            selector: Felt::from_str(
+                "774397379524139446221206168840917193112228400237242521560346153613428128537",
+            )
+            .unwrap(),
+            payload: vec![
+                Felt::from_str("0xca14007eff0db1f8135f4c25b34de49ab0d42766").unwrap(), // First payload element
+                Felt::from_str("0x11dd734a52cd2ee23ffe8b5054f5a8ecf5d1ad50").unwrap(), // Second payload element
+                Felt::from_str("0x13cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1")
+                    .unwrap(), // Third payload element
+                Felt::from_str("0x4f9c6a3ec958b0de0000").unwrap(), // Fourth payload element
+                Felt::ZERO,                                        // Fifth payload element (0x0)
+            ],
+        };
+
+        // Create a second test message with same recipient but different amount
+        // This simulates a second deposit transaction to the same recipient with different amount
+        let test_event_2 = L1ToL2MessageSentEvent {
+            from_address: EthAddress::from_str("0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4")
+                .unwrap(),
+            l2_address: Felt::from_str(
+                "2524392021852001135582825949054576525094493216367559068627275826195272239197",
+            )
+            .unwrap(),
+            selector: Felt::from_str(
+                "774397379524139446221206168840917193112228400237242521560346153613428128537",
+            )
+            .unwrap(),
+            payload: vec![
+                Felt::from_str("0xca14007eff0db1f8135f4c25b34de49ab0d42766").unwrap(), // Same recipient address
+                Felt::from_str("0x11dd734a52cd2ee23ffe8b5054f5a8ecf5d1ad50").unwrap(), // Same second payload (token address)
+                Felt::from_str("0x13cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1")
+                    .unwrap(), // Same third payload element
+                Felt::from_str("0x2386f26fc10000").unwrap(), // Different amount (smaller)
+                Felt::ZERO,                                  // Fifth payload element (0x0)
+            ],
+        };
+
+        // Create array of two events for double deposit estimation
+        let events = vec![test_event_1.clone(), test_event_2.clone()];
+
+        // Estimate fees for both messages
+        let result = estimator.estimate_messages_fee(events).await;
+
+        // Assert that the result is Ok
+        assert!(
+            result.is_ok(),
+            "Fee estimation should succeed for double deposit"
+        );
+
+        let summary = result.unwrap();
+
+        // Print debug information first
+        println!("Fee estimation summary:");
+        println!("  Total messages: {}", summary.total_messages);
+        println!("  Successful estimates: {}", summary.successful_estimates);
+        println!("  Failed estimates: {}", summary.failed_estimates);
+        println!(
+            "  Total fee: {} Wei ({:.6} ETH)",
+            summary.total_fee_wei, summary.total_fee_eth
+        );
+        println!(
+            "  Individual estimates count: {}",
+            summary.individual_estimates.len()
+        );
+        println!("  Errors: {:?}", summary.errors);
+
+        // Verify summary metrics
+        assert_eq!(summary.total_messages, 2, "Should have 2 total messages");
+
+        // If there are errors, print them and handle accordingly
+        if !summary.errors.is_empty() {
+            println!("Errors encountered:");
+            for error in &summary.errors {
+                println!("  - {}", error);
+            }
+        }
+
+        // Both estimates should succeed now that we're using valid payload data
+        assert_eq!(
+            summary.successful_estimates, 2,
+            "Both estimates should succeed"
+        );
+        assert_eq!(summary.failed_estimates, 0, "No estimates should fail");
+        assert!(
+            summary.total_fee_wei > 0,
+            "Total fee should be greater than 0"
+        );
+        assert!(
+            summary.total_fee_eth > 0.0,
+            "Total fee in ETH should be greater than 0"
+        );
+        assert_eq!(
+            summary.individual_estimates.len(),
+            2,
+            "Should have exactly 2 individual estimates"
+        );
+        assert!(summary.errors.is_empty(), "Should have no errors");
+
+        // Verify individual estimates (both should be available)
+        let estimate_1 = &summary.individual_estimates[0];
+        let estimate_2 = &summary.individual_estimates[1];
+
+        // Check that both estimates have valid values
+        assert_eq!(estimate_1.l2_address, test_event_1.l2_address);
+        assert_eq!(estimate_1.selector, test_event_1.selector);
+        assert!(estimate_1.gas_consumed > 0);
+        assert!(estimate_1.gas_price > 0);
+        assert!(estimate_1.overall_fee > 0);
+
+        assert_eq!(estimate_2.l2_address, test_event_2.l2_address);
+        assert_eq!(estimate_2.selector, test_event_2.selector);
+        assert!(estimate_2.gas_consumed > 0);
+        assert!(estimate_2.gas_price > 0);
+        assert!(estimate_2.overall_fee > 0);
+
+        println!("Message 1 fee: {} Wei", estimate_1.overall_fee);
+        println!("Message 2 fee: {} Wei", estimate_2.overall_fee);
+
+        // Verify that total fee is the sum of individual fees
+        let expected_total_fee: u128 = summary
+            .individual_estimates
+            .iter()
+            .map(|est| est.overall_fee)
+            .sum();
+        assert_eq!(
+            summary.total_fee_wei, expected_total_fee,
+            "Total fee should equal sum of individual fees"
+        );
+
+        // Verify ETH conversion is correct (1 ETH = 10^18 Wei)
+        let expected_eth_fee = expected_total_fee as f64 / 1_000_000_000_000_000_000.0;
+        assert!(
+            (summary.total_fee_eth - expected_eth_fee).abs() < 1e-10,
+            "ETH conversion should be accurate"
+        );
+
+        println!("Double deposit fee estimation completed successfully:");
+        println!(
+            "  Total fee: {} Wei ({:.6} ETH)",
+            summary.total_fee_wei, summary.total_fee_eth
+        );
+        println!("  Both estimates succeeded!");
+    }
+
+    #[tokio::test]
     async fn test_jsonrpc_estimate_message_fee_sanity_check() {
         use starknet::core::types::EthAddress;
         use starknet::providers::Url;
