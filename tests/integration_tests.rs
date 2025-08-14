@@ -22,7 +22,7 @@ async fn start_anvil_node() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
     let anvil_url = format!("http://{}:{}", ANVIL_HOST, ANVIL_PORT);
 
-    if let Ok(_) = client.post(&anvil_url).send().await {
+    if (client.post(&anvil_url).send().await).is_ok() {
         println!("Anvil is already running on {}", anvil_url);
         return Ok(());
     }
@@ -54,7 +54,7 @@ async fn start_anvil_node() -> Result<(), Box<dyn std::error::Error>> {
     let max_attempts = 30;
 
     while attempts < max_attempts {
-        if let Ok(_) = client.post(&anvil_url).send().await {
+        if (client.post(&anvil_url).send().await).is_ok() {
             println!("Anvil node is ready!");
             return Ok(());
         }
@@ -112,7 +112,7 @@ async fn start_test_server() -> SocketAddr {
 
     while attempts < max_attempts {
         if client
-            .get(&format!("http://{}:{}", TEST_HOST, TEST_PORT))
+            .get(format!("http://{}:{}", TEST_HOST, TEST_PORT))
             .send()
             .await
             .is_ok()

@@ -65,7 +65,7 @@ async fn start_server() -> Result<SocketAddr, Box<dyn std::error::Error>> {
     println!("⏳ Waiting for server to start...");
     while attempts < max_attempts {
         if let Ok(response) = client
-            .post(&format!("http://{}", addr))
+            .post(format!("http://{}", addr))
             .header("Content-Type", "application/json")
             .json(&json!({
                 "jsonrpc": "2.0",

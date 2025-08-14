@@ -1160,9 +1160,6 @@ mod tests {
             }
         };
 
-        // Print all events emitted by the transaction for debugging
-        print_transaction_events(&receipt);
-
         // Debug transaction details
         println!("Transaction status: {}", receipt.status());
         println!("Transaction hash: {:?}", receipt.transaction_hash);
