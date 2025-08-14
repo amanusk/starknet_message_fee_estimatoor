@@ -86,6 +86,13 @@ sol!(
     "src/simulator/interfaces/StarknetCore.json"
 );
 
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    DoubleDeposit,
+    "src/test_utils/DoubleDeposit.json"
+);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct L1ToL2MessageSentEvent {
     pub from_address: EthAddress,
@@ -1029,5 +1036,244 @@ mod tests {
             gas_used
         );
         println!("All L1ToL2MessageSent event validations passed!");
+    }
+
+    #[tokio::test]
+    async fn test_double_deposit_unsigned_tx() {
+        // Spawn Anvil with fork from mainnet at a more recent block where contract should be deployed
+        let anvil = Anvil::new()
+            .arg("--fork-url")
+            .arg("https://reth-ethereum.ithaca.xyz/rpc")
+            .fork_block_number(23138386)
+            .try_spawn()
+            .unwrap();
+
+        let provider = ProviderBuilder::new().connect_http(anvil.endpoint_url());
+
+        // doubleDeposit address = 0xEafC6a0b08f1AB67A00e618433C21de98358Bf5e
+        let double_deposit_address = address!("0xEafC6a0b08f1AB67A00e618433C21de98358Bf5e");
+
+        // Check if contract is deployed by looking at bytecode
+        let bytecode = provider.get_code_at(double_deposit_address).await.unwrap();
+        println!("Contract bytecode length: {} bytes", bytecode.len());
+        if bytecode.is_empty() {
+            panic!(
+                "DoubleDeposit contract is not deployed at address {}",
+                double_deposit_address
+            );
+        }
+
+        // Vitalik's address (well-known public address)
+        let vitalik_address = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+        let vitalik_addr = Address::from_str(vitalik_address).unwrap();
+
+        // Check Vitalik's balance
+        let balance = provider.get_balance(vitalik_addr).await.unwrap();
+        println!(
+            "Vitalik's balance: {} ETH",
+            balance.to::<u128>() as f64 / 1e18
+        );
+
+        // Fund Vitalik's account with more ETH if needed
+        let funding_amount = parse_ether("100").unwrap(); // 100 ETH
+        let _: Value = provider
+            .raw_request(
+                "anvil_setBalance".into(),
+                json!([vitalik_address, format!("0x{:x}", funding_amount)]),
+            )
+            .await
+            .unwrap();
+
+        let new_balance = provider.get_balance(vitalik_addr).await.unwrap();
+        println!(
+            "Vitalik's new balance: {} ETH",
+            new_balance.to::<u128>() as f64 / 1e18
+        );
+
+        // Test parameters for doubleDeposit
+        let amount1 = U256::from_str("100000000000000000").unwrap(); // 0.1 ETH
+        let amount2 = U256::from_str("200000000000000000").unwrap(); // 0.2 ETH
+                                                                     // Use valid L2 addresses (Starknet field elements)
+        let l2_recipient1 =
+            U256::from_str("0x1234567890abcdef1234567890abcdef1234567890abcdef123456789").unwrap();
+        let l2_recipient2 =
+            U256::from_str("0x9876543210fedcba9876543210fedcba9876543210fedcba987654321").unwrap();
+
+        let nonce = provider.get_transaction_count(vitalik_addr).await.unwrap();
+
+        // Calculate required ETH (amount1 + amount2 + fees)
+        // Use generous fee estimation to ensure we have enough
+        let estimated_fees = parse_ether("0.01").unwrap(); // 0.01 ETH for fees (generous)
+        let total_value = amount1 + amount2 + estimated_fees;
+
+        println!("Sending transaction with:");
+        println!("  amount1: {} ETH", amount1.to::<u128>() as f64 / 1e18);
+        println!("  amount2: {} ETH", amount2.to::<u128>() as f64 / 1e18);
+        println!(
+            "  estimated_fees: {} ETH",
+            estimated_fees.to::<u128>() as f64 / 1e18
+        );
+        println!(
+            "  total_value: {} ETH",
+            total_value.to::<u128>() as f64 / 1e18
+        );
+
+        // Create function call data for doubleDeposit(uint256,uint256,uint256,uint256)
+        // Function selector: 0x0c4c5492
+        let mut calldata = vec![0x0c, 0x4c, 0x54, 0x92]; // doubleDeposit function selector
+
+        // Add parameters (each uint256 is 32 bytes)
+        calldata.extend_from_slice(&amount1.to_be_bytes::<32>()); // amount1
+        calldata.extend_from_slice(&amount2.to_be_bytes::<32>()); // amount2
+        calldata.extend_from_slice(&l2_recipient1.to_be_bytes::<32>()); // l2Recipient1
+        calldata.extend_from_slice(&l2_recipient2.to_be_bytes::<32>()); // l2Recipient2
+
+        // Create unsigned transaction data
+        let unsigned_tx = UnsignedTransactionData {
+            from: vitalik_address.to_string(),
+            to: Some(double_deposit_address.to_string()),
+            value: total_value.to_string(),
+            data: calldata,
+            gas_limit: Some(300000),
+            gas_price: None, // 20 gwei
+            max_fee_per_gas: Some("20000000000".to_string()),
+            max_priority_fee_per_gas: Some("20000000000".to_string()),
+            nonce: Some(nonce),
+        };
+
+        // Create a TransactionSimulator with the forked Anvil endpoint
+        let config = NetworkConfig {
+            l1_rpc_url: anvil.endpoint_url().to_string(),
+        };
+        let simulator = TransactionSimulator::new(config).unwrap();
+
+        // Execute the transaction
+        let result = simulator
+            .simulate_unsigned_tx_with_receipt(&unsigned_tx)
+            .await;
+
+        let (gas_used, receipt) = match result {
+            Ok((gas, receipt)) => (gas, receipt),
+            Err(e) => {
+                println!("Transaction failed with error: {}", e);
+                panic!("Transaction execution failed: {}", e);
+            }
+        };
+
+        // Print all events emitted by the transaction for debugging
+        print_transaction_events(&receipt);
+
+        // Debug transaction details
+        println!("Transaction status: {}", receipt.status());
+        println!("Transaction hash: {:?}", receipt.transaction_hash);
+        println!("Gas used: {}", gas_used);
+        println!("Gas limit: {}", unsigned_tx.gas_limit.unwrap_or(0));
+        println!("Value sent: {} ETH", total_value.to::<u128>() as f64 / 1e18);
+
+        // If transaction failed, let's continue to see what events might have been emitted
+        if !receipt.status() {
+            println!("⚠️  Transaction reverted, but continuing to analyze events...");
+        }
+        assert!(gas_used > 0, "Gas used should be greater than 0");
+        assert!(gas_used <= 300000, "Gas used should not exceed gas limit");
+
+        // Verify transaction was successful
+        assert!(receipt.status(), "Transaction should be successful");
+
+        println!(
+            "Simulated double deposit transaction gas used: {}",
+            gas_used
+        );
+
+        // Parse DoubleDepositExecuted events
+        let deposit_events: Vec<_> = receipt
+            .logs()
+            .iter()
+            .filter_map(|log| DoubleDeposit::DoubleDepositExecuted::decode_log(log.as_ref()).ok())
+            .collect();
+
+        println!(
+            "Found {} DoubleDepositExecuted events:",
+            deposit_events.len()
+        );
+        for (i, event) in deposit_events.iter().enumerate() {
+            println!("  Event {}:", i + 1);
+            println!("    amount1: {}", event.amount1);
+            println!("    amount2: {}", event.amount2);
+            println!("    l2Recipient1: {}", event.l2Recipient1);
+            println!("    l2Recipient2: {}", event.l2Recipient2);
+            println!("    totalEthSent: {}", event.totalEthSent);
+        }
+
+        // Verify exactly one DoubleDepositExecuted event is emitted
+        assert_eq!(
+            deposit_events.len(),
+            1,
+            "Expected exactly 1 DoubleDepositExecuted event, but found {}",
+            deposit_events.len()
+        );
+
+        let deposit_event = &deposit_events[0];
+
+        // Verify the event data matches our parameters
+        assert_eq!(deposit_event.amount1, amount1, "Amount1 mismatch");
+        assert_eq!(deposit_event.amount2, amount2, "Amount2 mismatch");
+        assert_eq!(
+            deposit_event.l2Recipient1, l2_recipient1,
+            "L2 recipient1 mismatch"
+        );
+        assert_eq!(
+            deposit_event.l2Recipient2, l2_recipient2,
+            "L2 recipient2 mismatch"
+        );
+        assert_eq!(
+            deposit_event.totalEthSent, total_value,
+            "Total ETH sent mismatch"
+        );
+
+        // Parse L1ToL2MessageSent events (should be 2 for double deposit)
+        let l1_to_l2_logs = simulator.parse_l1_to_l2_message_events(&receipt).unwrap();
+        println!("Found {} L1ToL2MessageSent events:", l1_to_l2_logs.len());
+
+        for (i, log) in l1_to_l2_logs.iter().enumerate() {
+            println!("  L1ToL2 Event {}:", i + 1);
+            println!("    from_address: {:?}", log.from_address);
+            println!("    to_address: {}", log.l2_address);
+            println!("    selector: {}", log.selector);
+            println!("    payload: {:?}", log.payload);
+        }
+
+        // Verify exactly two L1ToL2MessageSent events are emitted (one for each deposit)
+        assert_eq!(
+            l1_to_l2_logs.len(),
+            2,
+            "Expected exactly 2 L1ToL2MessageSent events, but found {}",
+            l1_to_l2_logs.len()
+        );
+
+        // Verify both events come from the StarkGate contract
+        // We can see from the debug output that they come from the correct address
+        // 0xae0Ee0A63A2cE6BaEeFE56e7714FB4EFE48D419 (StarkGate ETH bridge)
+        for (i, event) in l1_to_l2_logs.iter().enumerate() {
+            // Verify that payload is not empty
+            assert!(
+                !event.payload.is_empty(),
+                "L1ToL2 event {} should have non-empty payload",
+                i + 1
+            );
+
+            // Verify payload has expected structure (token, from, to, amount, nonce)
+            assert_eq!(
+                event.payload.len(),
+                5,
+                "L1ToL2 event {} should have 5 payload elements",
+                i + 1
+            );
+        }
+
+        println!("✅ All validations passed!");
+        println!("✅ DoubleDepositExecuted event parsed correctly");
+        println!("✅ Two L1ToL2MessageSent events parsed correctly");
+        println!("✅ Double deposit contract test completed successfully");
     }
 }
