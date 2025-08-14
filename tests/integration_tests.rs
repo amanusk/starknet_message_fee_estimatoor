@@ -1,7 +1,7 @@
-use estimate_starknet_message_fee::server::RpcServer;
 use reqwest::Client;
 use serde_json::{json, Value};
 use serial_test::serial;
+use starknet_message_fee_estimatoor::server::RpcServer;
 use std::net::SocketAddr;
 use std::process::{Child, Command};
 use std::sync::Mutex;

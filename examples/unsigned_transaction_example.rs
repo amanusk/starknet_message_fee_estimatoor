@@ -1,4 +1,4 @@
-use estimate_starknet_message_fee::simulator::{
+use starknet_message_fee_estimatoor::simulator::{
     NetworkConfig, TransactionSimulator, UnsignedTransactionData,
 };
 use eyre::Result;

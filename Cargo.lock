@@ -1858,37 +1858,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "estimate_starknet_message_fee"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "anyhow",
- "axum",
- "bytes",
- "chrono",
- "config",
- "env_logger",
- "envfile",
- "eyre",
- "flexi_logger",
- "hex",
- "jsonrpsee",
- "log",
- "rand 0.8.5",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "serial_test",
- "starknet",
- "tempfile",
- "tokio",
- "tower 0.4.13",
- "tower-http 0.5.2",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "eth-keystore"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4768,6 +4737,37 @@ dependencies = [
  "serde",
  "size-of",
  "zeroize",
+]
+
+[[package]]
+name = "starknet_message_fee_estimatoor"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "axum",
+ "bytes",
+ "chrono",
+ "config",
+ "env_logger",
+ "envfile",
+ "eyre",
+ "flexi_logger",
+ "hex",
+ "jsonrpsee",
+ "log",
+ "rand 0.8.5",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "starknet",
+ "tempfile",
+ "tokio",
+ "tower 0.4.13",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
