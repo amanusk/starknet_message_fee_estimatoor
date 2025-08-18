@@ -87,33 +87,133 @@ Estimates fees for a list of L1 to L2 message events.
 }
 ```
 
+### `estimate_l1_to_l2_message_fees_from_unsigned_tx`
+
+Estimates fees for L1 to L2 messages by simulating an unsigned transaction. This endpoint accepts an unsigned transaction and internally simulates it to extract L1ToL2MessageSent events, then estimates the fees for those messages.
+
+**Request Format:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "estimate_l1_to_l2_message_fees_from_unsigned_tx",
+  "params": [
+    {
+      "from": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+      "to": "0xEafC6a0b08f1AB67A00e618433C21de98358Bf5e",
+      "value": "310000000000000000",
+      "data": "0x0c4c5492000000000000000000000000000000000000000000000000016345785d8a000000000000000000000000000000000000000000000000000002c68af0bb14000000000001234567890abcdef1234567890abcdef1234567890abcdef12345678900000009876543210fedcba9876543210fedcba9876543210fedcba987654321",
+      "gas": 300000,
+      "maxFeePerGas": "20000000000",
+      "maxPriorityFeePerGas": "20000000000"
+    }
+  ],
+  "id": 2
+}
+```
+
+**Response Format:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "result": {
+      "errors": [],
+      "failed_estimates": 0,
+      "individual_estimates": [
+        {
+          "gas_consumed": 22580,
+          "gas_price": 6381820900,
+          "l2_address": "0x594c1582459ea03f77deaf9eb7e3917d6994a03c13405ba42867f83d85f085d",
+          "overall_fee": 144125219762000,
+          "selector": "0x1b64b1b3b690b43b9b514fb81377518f4039cd3e4f4914d8a6bdf01d679fb19",
+          "unit": "Wei"
+        },
+        {
+          "gas_consumed": 22580,
+          "gas_price": 6381820900,
+          "l2_address": "0x594c1582459ea03f77deaf9eb7e3917d6994a03c13405ba42867f83d85f085d",
+          "overall_fee": 144125219762000,
+          "selector": "0x1b64b1b3b690b43b9b514fb81377518f4039cd3e4f4914d8a6bdf01d679fb19",
+          "unit": "Wei"
+        }
+      ],
+      "successful_estimates": 2,
+      "total_fee_eth": 0.000288250439524,
+      "total_fee_wei": 288250439524000,
+      "total_messages": 2
+    }
+  },
+  "id": 2
+}
+```
+
 ## Example Usage
 
 ### Using curl
+
+#### Direct Message Fee Estimation
 
 ```bash
 curl -X POST http://localhost:8080 \
   -H "Content-Type: application/json" \
   -d '{
-        "messages": [
-          {
-            "from_address": "0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4",
-            "l2_address": "0x594c1582459ea03f77deaf9eb7e3917d6994a03c13405ba42867f83d85f085d",
-            "selector": "0x1b64b1b3b690b43b9b514fb81377518f4039cd3e4f4914d8a6bdf01d679fb19",
-            "payload": [
-              "0xca14007eff0db1f8135f4c25b34de49ab0d42766",
-              "0x11dd734a52cd2ee23ffe8b5054f5a8ecf5d1ad50",
-              "0x13cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1",
-              "0x4f9c6a3ec958b0de0000",
-              "0x0"
-            ]
-          }
-        ]
-      }
-    ],
+    "jsonrpc": "2.0",
+    "method": "estimate_l1_to_l2_message_fees",
+    "params": [{
+      "messages": [
+        {
+          "from_address": "0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4",
+          "l2_address": "0x594c1582459ea03f77deaf9eb7e3917d6994a03c13405ba42867f83d85f085d",
+          "selector": "0x1b64b1b3b690b43b9b514fb81377518f4039cd3e4f4914d8a6bdf01d679fb19",
+          "payload": [
+            "0xca14007eff0db1f8135f4c25b34de49ab0d42766",
+            "0x11dd734a52cd2ee23ffe8b5054f5a8ecf5d1ad50",
+            "0x13cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1",
+            "0x4f9c6a3ec958b0de0000",
+            "0x0"
+          ]
+        }
+      ]
+    }],
     "id": 1
-}'
+  }'
 ```
+
+#### Double Starknet Deposit Fee Estimation
+
+This example demonstrates estimating fees for a double ETH deposit to Starknet using the `doubleDeposit` function:
+
+```bash
+curl -X POST http://localhost:8080 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "estimate_l1_to_l2_message_fees_from_unsigned_tx",
+    "params": [{
+      "from": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+      "to": "0xEafC6a0b08f1AB67A00e618433C21de98358Bf5e",
+      "value": "310000000000000000",
+      "data": "0x0c4c5492000000000000000000000000000000000000000000000000016345785d8a000000000000000000000000000000000000000000000000000002c68af0bb14000000000001234567890abcdef1234567890abcdef1234567890abcdef12345678900000009876543210fedcba9876543210fedcba9876543210fedcba987654321",
+      "gas": 300000,
+      "maxFeePerGas": "20000000000",
+      "maxPriorityFeePerGas": "20000000000"
+    }],
+    "id": 2
+  }'
+```
+
+**Double Deposit Parameters:**
+
+- **from**: Well-funded address (Vitalik's address)
+- **to**: DoubleDeposit contract address
+- **value**: 0.31 ETH (0.1 + 0.2 + 0.01 for fees)
+- **data**: Encoded call to `doubleDeposit(uint256,uint256,uint256,uint256)` with:
+  - amount1: 0.1 ETH (100000000000000000 wei)
+  - amount2: 0.2 ETH (200000000000000000 wei)
+  - l2_recipient1: Valid L2 address for first deposit
+  - l2_recipient2: Valid L2 address for second deposit
 
 ## Response Fields
 
