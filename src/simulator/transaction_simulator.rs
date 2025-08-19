@@ -541,7 +541,7 @@ mod tests {
         let anvil = Anvil::new()
             .arg("--fork-url")
             .arg("https://reth-ethereum.ithaca.xyz/rpc")
-            .fork_block_number(23113921)
+            .fork_block_number(23113920)
             .try_spawn()
             .unwrap();
         let provider = ProviderBuilder::new().connect_http(anvil.endpoint_url());
@@ -551,12 +551,6 @@ mod tests {
         println!("Block number: {}", block_number);
 
         // tx to simulate https://etherscan.io/tx/0xd5fdee26751ba7175444cb587c1b1ddeca3a0d22cbf87bf0c1d6b4d263c6a699
-
-        let balance = provider
-            .get_balance(address!("0x11Dd734a52Cd2EE23FFe8B5054F5A8ECF5D1Ad50"))
-            .await
-            .unwrap();
-        println!("Balance: {}", balance);
 
         let contract_tx = TxEip1559 {
             chain_id: 1,
@@ -889,7 +883,7 @@ mod tests {
         let anvil = Anvil::new()
             .arg("--fork-url")
             .arg("https://reth-ethereum.ithaca.xyz/rpc")
-            .fork_block_number(23113921)
+            .fork_block_number(23113920)
             .try_spawn()
             .unwrap();
 

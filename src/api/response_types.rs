@@ -98,6 +98,9 @@ pub enum ApiErrorCode {
     /// Failed to estimate fee - Starknet RPC issues, invalid message data, etc.
     FeeEstimationFailed,
 
+    /// Rate limit exceeded - too many requests to external services
+    RateLimitExceeded,
+
     /// Generic error for unexpected failures
     InternalError,
 }
@@ -111,6 +114,7 @@ impl ApiErrorCode {
             ApiErrorCode::InvalidSignedTransaction => "Invalid signed transaction",
             ApiErrorCode::TransactionSimulationFailed => "Failed to simulate transaction",
             ApiErrorCode::FeeEstimationFailed => "Failed to estimate fee",
+            ApiErrorCode::RateLimitExceeded => "Rate limit exceeded",
             ApiErrorCode::InternalError => "Internal server error",
         }
     }

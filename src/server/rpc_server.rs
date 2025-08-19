@@ -50,9 +50,9 @@ impl RpcServer {
     pub async fn start(self, addr: SocketAddr) -> Result<()> {
         let server = ServerBuilder::default().build(addr).await?;
 
-        // Move simulator and fee estimator to shared state for RPC methods
-        let simulator = std::sync::Arc::new(tokio::sync::Mutex::new(self.simulator));
-        let fee_estimator = std::sync::Arc::new(tokio::sync::Mutex::new(self.fee_estimator));
+        // Share instances without locks - they're read-only and thread-safe
+        let simulator = std::sync::Arc::new(self.simulator);
+        let fee_estimator = std::sync::Arc::new(self.fee_estimator);
         let mut module = RpcModule::new(());
 
         // Register estimate_l1_to_l2_message_fees method
@@ -83,9 +83,8 @@ impl RpcServer {
                         }
                     };
 
-                    // Estimate fees using Starknet fee estimator
-                    let fee_estimator_guard = fee_estimator.lock().await;
-                    match fee_estimator_guard
+                    // Estimate fees using shared fee estimator instance
+                    match fee_estimator
                         .estimate_messages_fee(message_events)
                         .await
                     {
@@ -144,9 +143,8 @@ impl RpcServer {
                             }
                         };
 
-                        // Simulate transaction to get receipt
-                        let simulator_guard = simulator.lock().await;
-                        let (_, receipt) = match simulator_guard
+                        // Simulate transaction to get receipt using shared simulator instance
+                        let (_, receipt) = match simulator
                             .simulate_tx_envelope_with_receipt(&tx_envelope)
                             .await
                         {
@@ -167,7 +165,7 @@ impl RpcServer {
 
                         // Parse L1 to L2 message events from receipt
                         let message_events =
-                            match simulator_guard.parse_l1_to_l2_message_events(&receipt) {
+                            match simulator.parse_l1_to_l2_message_events(&receipt) {
                                 Ok(events) => events,
                                 Err(e) => {
                                     error!(
@@ -186,9 +184,8 @@ impl RpcServer {
                                 }
                             };
 
-                        // Estimate fees using Starknet fee estimator
-                        let fee_estimator_guard = fee_estimator.lock().await;
-                        match fee_estimator_guard
+                        // Estimate fees using shared fee estimator instance
+                        match fee_estimator
                             .estimate_messages_fee(message_events)
                             .await
                         {
@@ -248,9 +245,8 @@ impl RpcServer {
                             }
                         };
 
-                        // Simulate transaction to get receipt
-                        let simulator_guard = simulator.lock().await;
-                        let (_, receipt) = match simulator_guard
+                        // Simulate transaction to get receipt using shared simulator instance
+                        let (_, receipt) = match simulator
                             .simulate_unsigned_tx_with_receipt(&transaction_data)
                             .await
                         {
@@ -271,7 +267,7 @@ impl RpcServer {
 
                         // Parse L1 to L2 message events from receipt
                         let message_events =
-                            match simulator_guard.parse_l1_to_l2_message_events(&receipt) {
+                            match simulator.parse_l1_to_l2_message_events(&receipt) {
                                 Ok(events) => events,
                                 Err(e) => {
                                     error!(
@@ -290,9 +286,8 @@ impl RpcServer {
                                 }
                             };
 
-                        // Estimate fees using Starknet fee estimator
-                        let fee_estimator_guard = fee_estimator.lock().await;
-                        match fee_estimator_guard
+                        // Estimate fees using shared fee estimator instance
+                        match fee_estimator
                             .estimate_messages_fee(message_events)
                             .await
                         {
