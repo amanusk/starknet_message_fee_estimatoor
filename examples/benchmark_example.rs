@@ -62,7 +62,6 @@ async fn run_parallel_benchmark(
     // Spawn client tasks
     for client_id in 0..num_clients {
         let barrier = barrier.clone();
-        let endpoint_type = endpoint_type;
         let handle = tokio::spawn(async move {
             // Wait for all clients to be ready
             barrier.wait().await;
