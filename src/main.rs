@@ -22,10 +22,8 @@ async fn main() -> Result<()> {
     let addr = settings.server_addr()?;
 
     // Create and start RPC server with configuration
-    let rpc_server = RpcServer::new_with_config(
-        settings.ethereum.endpoint.clone(),
-        settings.starknet.endpoint.clone(),
-    )?;
+    let rpc_server =
+        RpcServer::new_with_config(&settings.ethereum.endpoint, &settings.starknet.endpoint)?;
 
     info!("Starting server on {}", addr);
 
