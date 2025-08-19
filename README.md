@@ -86,10 +86,6 @@ For detailed API documentation, request/response formats, and working examples, 
 - **[API Examples](examples/estimate_fees_example.md)** - Complete API documentation with request/response examples
 - **[Client Example](examples/client_example.rs)** - Rust client implementation
 
-### Quick Test
-
-Test the server with a simple curl command:
-
 ## Examples and Testing
 
 ### Running Examples
@@ -111,9 +107,6 @@ cargo test
 
 # Run only integration tests
 cargo test --test integration_tests
-
-# Run tests with output
-cargo test -- --nocapture
 ```
 
 The integration tests will:
@@ -146,10 +139,10 @@ The integration tests will:
 - [x] Implement Ethereum transaction parsing and simulation
 - [x] Add event extraction from simulation results
 - [x] Integrate Starknet client for fee estimation
-- [ ] Add proper error handling and validation
+- [x] Add proper error handling and validation
 - [ ] Implement logging and monitoring
-- [ ] Set a simplified API and test it
-- [ ] Set possible errors returned from the server
+- [x] Set a simplified API and test it
+- [x] Set possible errors returned from the server
 - [ ] Publish as a crate and library
 - [ ] More test coverage for possible failures and edge cases
 - [ ] Run benchmarks and stress tests

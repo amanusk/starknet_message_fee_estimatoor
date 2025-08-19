@@ -536,7 +536,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_starknet_deposit_tx() {
+    async fn test_simulate_signed_deposit_tx() {
         // Spawn Anvil and get its endpoint URL
         let anvil = Anvil::new()
             .arg("--fork-url")
@@ -551,6 +551,12 @@ mod tests {
         println!("Block number: {}", block_number);
 
         // tx to simulate https://etherscan.io/tx/0xd5fdee26751ba7175444cb587c1b1ddeca3a0d22cbf87bf0c1d6b4d263c6a699
+
+        let balance = provider
+            .get_balance(address!("0x11Dd734a52Cd2EE23FFe8B5054F5A8ECF5D1Ad50"))
+            .await
+            .unwrap();
+        println!("Balance: {}", balance);
 
         let contract_tx = TxEip1559 {
             chain_id: 1,
