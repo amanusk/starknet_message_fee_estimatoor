@@ -55,6 +55,10 @@ pub struct StarknetFeeEstimator {
 
 impl StarknetFeeEstimator {
     /// Create a new Starknet fee estimator with the given configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the RPC URL is invalid or cannot be parsed
     pub fn new(config: StarknetFeeEstimatorConfig) -> Result<Self> {
         info!("Creating StarknetFeeEstimator with URL: {}", config.rpc_url);
 
@@ -68,6 +72,10 @@ impl StarknetFeeEstimator {
     }
 
     /// Create a new estimator from a simple RPC URL string
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the RPC URL is invalid or cannot be parsed
     pub fn from_url(rpc_url: &str) -> Result<Self> {
         let config = StarknetFeeEstimatorConfig {
             rpc_url: rpc_url.to_string(),
@@ -77,6 +85,10 @@ impl StarknetFeeEstimator {
     }
 
     /// Estimate fees for a single L1 to L2 message
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fee estimation fails due to network issues or invalid message data
     pub async fn estimate_single_message_fee(
         &self,
         event: &L1ToL2MessageSentEvent,
@@ -111,6 +123,10 @@ impl StarknetFeeEstimator {
     }
 
     /// Estimate fees for multiple L1 to L2 messages and return a summary
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fee estimation fails due to network issues or invalid message data
     pub async fn estimate_messages_fee(
         &self,
         events: Vec<L1ToL2MessageSentEvent>,
@@ -151,7 +167,8 @@ impl StarknetFeeEstimator {
         let successful_estimates = individual_estimates.len();
         let failed_estimates = total_messages - successful_estimates;
 
-        // Convert Wei to ETH (1 ETH = 10^18 Wei)
+        // Convert Wei to ETH (1 ETH = 10^18 Wei) - using f64 for precision
+        #[allow(clippy::cast_precision_loss)]
         let total_fee_eth = total_fee_wei as f64 / 1_000_000_000_000_000_000.0;
 
         info!(

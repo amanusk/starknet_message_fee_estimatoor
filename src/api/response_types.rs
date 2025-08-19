@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// Standardized API response for all RPC methods
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiResponse {
-    /// Success data - contains the FeeEstimationSummary when successful
+    /// Success data - contains the `FeeEstimationSummary` when successful
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<FeeEstimationSummary>,
 
@@ -15,6 +15,7 @@ pub struct ApiResponse {
 
 impl ApiResponse {
     /// Create a successful response
+    #[must_use]
     pub fn success(summary: FeeEstimationSummary) -> Self {
         Self {
             result: Some(summary),
@@ -23,6 +24,7 @@ impl ApiResponse {
     }
 
     /// Create an error response
+    #[must_use]
     pub fn error(error: ApiError) -> Self {
         Self {
             result: None,
@@ -32,16 +34,16 @@ impl ApiResponse {
 }
 
 /// Comprehensive error types that can occur during fee estimation
-/// Follows OpenRPC specification format with code, message, and data fields
+/// Follows `OpenRPC` specification format with code, message, and data fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiError {
-    /// Error code for programmatic handling (OpenRPC spec)
+    /// Error code for programmatic handling (`OpenRPC` spec)
     pub code: ApiErrorCode,
 
-    /// Human-readable error message (OpenRPC spec)
+    /// Human-readable error message (`OpenRPC` spec)
     pub message: String,
 
-    /// Additional error data (OpenRPC spec)
+    /// Additional error data (`OpenRPC` spec)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
 }
@@ -69,7 +71,7 @@ impl ApiError {
         }
     }
 
-    /// Create a new API error with details (alias for with_data for backward compatibility)
+    /// Create a new API error with details (alias for `with_data` for backward compatibility)
     pub fn with_details(
         code: ApiErrorCode,
         message: impl Into<String>,
@@ -98,12 +100,16 @@ pub enum ApiErrorCode {
     /// Failed to estimate fee - Starknet RPC issues, invalid message data, etc.
     FeeEstimationFailed,
 
+    /// Rate limit exceeded - too many requests to external services
+    RateLimitExceeded,
+
     /// Generic error for unexpected failures
     InternalError,
 }
 
 impl ApiErrorCode {
     /// Get the default message for each error code
+    #[must_use]
     pub fn default_message(&self) -> &'static str {
         match self {
             ApiErrorCode::InvalidInputFormat => "Invalid input format",
@@ -111,6 +117,7 @@ impl ApiErrorCode {
             ApiErrorCode::InvalidSignedTransaction => "Invalid signed transaction",
             ApiErrorCode::TransactionSimulationFailed => "Failed to simulate transaction",
             ApiErrorCode::FeeEstimationFailed => "Failed to estimate fee",
+            ApiErrorCode::RateLimitExceeded => "Rate limit exceeded",
             ApiErrorCode::InternalError => "Internal server error",
         }
     }

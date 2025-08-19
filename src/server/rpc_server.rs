@@ -18,6 +18,11 @@ pub struct RpcServer {
 
 impl RpcServer {
     #[allow(dead_code)]
+    /// Create a new RPC server with default configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the simulator or fee estimator cannot be initialized
     pub fn new() -> Result<Self> {
         // Initialize simulator with default network configuration
         let network_config = NetworkConfig::default();
@@ -33,13 +38,20 @@ impl RpcServer {
         })
     }
 
-    pub fn new_with_config(l1_rpc_url: String, starknet_rpc_url: String) -> Result<Self> {
+    /// Create a new RPC server with custom configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the simulator or fee estimator cannot be initialized
+    pub fn new_with_config(l1_rpc_url: &str, starknet_rpc_url: &str) -> Result<Self> {
         // Initialize simulator with custom network configuration
-        let network_config = NetworkConfig { l1_rpc_url };
+        let network_config = NetworkConfig {
+            l1_rpc_url: l1_rpc_url.to_string(),
+        };
         let simulator = TransactionSimulator::new(network_config)?;
 
         // Initialize Starknet fee estimator with custom RPC URL
-        let fee_estimator = StarknetFeeEstimator::from_url(&starknet_rpc_url)?;
+        let fee_estimator = StarknetFeeEstimator::from_url(starknet_rpc_url)?;
 
         Ok(Self {
             simulator,
@@ -47,12 +59,18 @@ impl RpcServer {
         })
     }
 
+    /// Start the RPC server on the specified address
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the server cannot be started or fails during operation
+    #[allow(clippy::too_many_lines)]
     pub async fn start(self, addr: SocketAddr) -> Result<()> {
         let server = ServerBuilder::default().build(addr).await?;
 
-        // Move simulator and fee estimator to shared state for RPC methods
-        let simulator = std::sync::Arc::new(tokio::sync::Mutex::new(self.simulator));
-        let fee_estimator = std::sync::Arc::new(tokio::sync::Mutex::new(self.fee_estimator));
+        // Share instances without locks - they're read-only and thread-safe
+        let simulator = std::sync::Arc::new(self.simulator);
+        let fee_estimator = std::sync::Arc::new(self.fee_estimator);
         let mut module = RpcModule::new(());
 
         // Register estimate_l1_to_l2_message_fees method
@@ -67,7 +85,7 @@ impl RpcServer {
                     );
 
                     // Parse L1 to L2 message events from params
-                    let message_events = match parse_l1_to_l2_message_params(params) {
+                    let message_events = match parse_l1_to_l2_message_params(&params) {
                         Ok(events) => events,
                         Err(e) => {
                             error!("Failed to parse L1 to L2 message parameters: {}", e);
@@ -83,9 +101,8 @@ impl RpcServer {
                         }
                     };
 
-                    // Estimate fees using Starknet fee estimator
-                    let fee_estimator_guard = fee_estimator.lock().await;
-                    match fee_estimator_guard
+                    // Estimate fees using shared fee estimator instance
+                    match fee_estimator
                         .estimate_messages_fee(message_events)
                         .await
                     {
@@ -99,7 +116,110 @@ impl RpcServer {
                             error!("L1 to L2 message fee estimation failed: {}", e);
                             let api_error = ApiError::with_details(
                                 ApiErrorCode::FeeEstimationFailed,
-                                "Failed to estimate fee",
+                                "Failed to estimate L1 to L2 message fees",
+                                e.to_string()
+                            );
+                            let response = ApiResponse::error(api_error);
+                            serde_json::to_value(response).unwrap_or_else(|_| {
+                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                            })
+                        }
+                    }
+                }
+            })?;
+        }
+
+        // Register estimate_l1_to_l2_message_fees_from_unsigned_tx method
+        {
+            let simulator_clone = simulator.clone();
+            let fee_estimator_clone = fee_estimator.clone();
+            module.register_async_method("estimate_l1_to_l2_message_fees_from_unsigned_tx", move |params, _| {
+                let simulator = simulator_clone.clone();
+                let fee_estimator = fee_estimator_clone.clone();
+                async move {
+                    info!(
+                        "estimate_l1_to_l2_message_fees_from_unsigned_tx called with params: {:?}",
+                        params
+                    );
+
+                    // Parse unsigned transaction from params
+                    let unsigned_tx = match parse_unsigned_transaction_params(&params) {
+                        Ok(tx) => tx,
+                        Err(e) => {
+                            error!("Failed to parse unsigned transaction parameters: {}", e);
+                            let api_error = ApiError::with_details(
+                                ApiErrorCode::InvalidUnsignedTransaction,
+                                "Invalid unsigned transaction format",
+                                e.to_string()
+                            );
+                            let response = ApiResponse::error(api_error);
+                            return serde_json::to_value(response).unwrap_or_else(|_| {
+                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                            });
+                        }
+                    };
+
+                    // Simulate the transaction to get L1 to L2 message events
+                    match simulator
+                        .simulate_unsigned_tx_with_receipt(&unsigned_tx)
+                        .await
+                    {
+                        Ok((_, receipt)) => {
+                            // Extract L1 to L2 message events from the receipt
+                            match TransactionSimulator::parse_l1_to_l2_message_events(&receipt) {
+                                Ok(events) => {
+                                    if events.is_empty() {
+                                        let api_error = ApiError::new(
+                                            ApiErrorCode::FeeEstimationFailed,
+                                            "No L1 to L2 message events found in transaction"
+                                        );
+                                        let response = ApiResponse::error(api_error);
+                                        return serde_json::to_value(response).unwrap_or_else(|_| {
+                                            serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                                        });
+                                    }
+
+                                    // Estimate fees for the extracted events
+                                    match fee_estimator.estimate_messages_fee(events).await {
+                                        Ok(summary) => {
+                                            let response = ApiResponse::success(summary);
+                                            serde_json::to_value(response).unwrap_or_else(|_| {
+                                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                                            })
+                                        }
+                                        Err(e) => {
+                                            error!("Fee estimation failed: {}", e);
+                                            let api_error = ApiError::with_details(
+                                                ApiErrorCode::FeeEstimationFailed,
+                                                "Failed to estimate fees for L1 to L2 messages",
+                                                e.to_string()
+                                            );
+                                            let response = ApiResponse::error(api_error);
+                                            serde_json::to_value(response).unwrap_or_else(|_| {
+                                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                                            })
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to parse L1 to L2 message events: {}", e);
+                                    let api_error = ApiError::with_details(
+                                        ApiErrorCode::TransactionSimulationFailed,
+                                        "Failed to parse L1 to L2 message events from transaction receipt",
+                                        e.to_string()
+                                    );
+                                    let response = ApiResponse::error(api_error);
+                                    serde_json::to_value(response).unwrap_or_else(|_| {
+                                        serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                                    })
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("Transaction simulation failed: {}", e);
+                            let api_error = ApiError::with_details(
+                                ApiErrorCode::TransactionSimulationFailed,
+                                "Failed to simulate unsigned transaction",
                                 e.to_string()
                             );
                             let response = ApiResponse::error(api_error);
@@ -116,212 +236,106 @@ impl RpcServer {
         {
             let simulator_clone = simulator.clone();
             let fee_estimator_clone = fee_estimator.clone();
-            module.register_async_method(
-                "estimate_l1_to_l2_message_fees_from_signed_tx",
-                move |params, _| {
-                    let simulator = simulator_clone.clone();
-                    let fee_estimator = fee_estimator_clone.clone();
-                    async move {
-                        info!(
+            module.register_async_method("estimate_l1_to_l2_message_fees_from_signed_tx", move |params, _| {
+                let simulator = simulator_clone.clone();
+                let fee_estimator = fee_estimator_clone.clone();
+                async move {
+                    info!(
                         "estimate_l1_to_l2_message_fees_from_signed_tx called with params: {:?}",
                         params
                     );
 
-                        // Parse signed transaction from params
-                        let tx_envelope = match parse_signed_transaction_params(params) {
-                            Ok(envelope) => envelope,
-                            Err(e) => {
-                                error!("Failed to parse signed transaction parameters: {}", e);
-                                let api_error = ApiError::with_details(
-                                    ApiErrorCode::InvalidSignedTransaction,
-                                    "Invalid signed transaction",
-                                    e.to_string()
-                                );
-                                let response = ApiResponse::error(api_error);
-                                return serde_json::to_value(response).unwrap_or_else(|_| {
-                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                });
-                            }
-                        };
+                    // Parse signed transaction from params
+                    let signed_tx = match parse_signed_transaction_params(&params) {
+                        Ok(tx) => tx,
+                        Err(e) => {
+                            error!("Failed to parse signed transaction parameters: {}", e);
+                            let api_error = ApiError::with_details(
+                                ApiErrorCode::InvalidSignedTransaction,
+                                "Invalid signed transaction format",
+                                e.to_string()
+                            );
+                            let response = ApiResponse::error(api_error);
+                            return serde_json::to_value(response).unwrap_or_else(|_| {
+                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                            });
+                        }
+                    };
 
-                        // Simulate transaction to get receipt
-                        let simulator_guard = simulator.lock().await;
-                        let (_, receipt) = match simulator_guard
-                            .simulate_tx_envelope_with_receipt(&tx_envelope)
-                            .await
-                        {
-                            Ok(result) => result,
-                            Err(e) => {
-                                error!("Failed to simulate signed transaction: {}", e);
-                                let api_error = ApiError::with_details(
-                                    ApiErrorCode::TransactionSimulationFailed,
-                                    "Failed to simulate transaction",
-                                    e.to_string()
-                                );
-                                let response = ApiResponse::error(api_error);
-                                return serde_json::to_value(response).unwrap_or_else(|_| {
-                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                });
-                            }
-                        };
+                    // Simulate the transaction to get L1 to L2 message events
+                    match simulator
+                        .simulate_tx_envelope_with_receipt(&signed_tx)
+                        .await
+                    {
+                        Ok((_, receipt)) => {
+                            // Extract L1 to L2 message events from the receipt
+                            match TransactionSimulator::parse_l1_to_l2_message_events(&receipt) {
+                                Ok(events) => {
+                                    if events.is_empty() {
+                                        let api_error = ApiError::new(
+                                            ApiErrorCode::FeeEstimationFailed,
+                                            "No L1 to L2 message events found in transaction"
+                                        );
+                                        let response = ApiResponse::error(api_error);
+                                        return serde_json::to_value(response).unwrap_or_else(|_| {
+                                            serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                                        });
+                                    }
 
-                        // Parse L1 to L2 message events from receipt
-                        let message_events =
-                            match simulator_guard.parse_l1_to_l2_message_events(&receipt) {
-                                Ok(events) => events,
+                                    // Estimate fees for the extracted events
+                                    match fee_estimator.estimate_messages_fee(events).await {
+                                        Ok(summary) => {
+                                            let response = ApiResponse::success(summary);
+                                            serde_json::to_value(response).unwrap_or_else(|_| {
+                                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                                            })
+                                        }
+                                        Err(e) => {
+                                            error!("Fee estimation failed: {}", e);
+                                            let api_error = ApiError::with_details(
+                                                ApiErrorCode::FeeEstimationFailed,
+                                                "Failed to estimate fees for L1 to L2 messages",
+                                                e.to_string()
+                                            );
+                                            let response = ApiResponse::error(api_error);
+                                            serde_json::to_value(response).unwrap_or_else(|_| {
+                                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                                            })
+                                        }
+                                    }
+                                }
                                 Err(e) => {
-                                    error!(
-                                        "Failed to parse L1 to L2 message events from receipt: {}",
-                                        e
-                                    );
+                                    error!("Failed to parse L1 to L2 message events: {}", e);
                                     let api_error = ApiError::with_details(
                                         ApiErrorCode::TransactionSimulationFailed,
-                                        "Failed to parse message events",
+                                        "Failed to parse L1 to L2 message events from transaction receipt",
                                         e.to_string()
                                     );
                                     let response = ApiResponse::error(api_error);
-                                    return serde_json::to_value(response).unwrap_or_else(|_| {
+                                    serde_json::to_value(response).unwrap_or_else(|_| {
                                         serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                    });
+                                    })
                                 }
-                            };
-
-                        // Estimate fees using Starknet fee estimator
-                        let fee_estimator_guard = fee_estimator.lock().await;
-                        match fee_estimator_guard
-                            .estimate_messages_fee(message_events)
-                            .await
-                        {
-                            Ok(summary) => {
-                                let response = ApiResponse::success(summary);
-                                serde_json::to_value(response).unwrap_or_else(|_| {
-                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                })
-                            }
-                            Err(e) => {
-                                error!("L1 to L2 message fee estimation failed: {}", e);
-                                let api_error = ApiError::with_details(
-                                    ApiErrorCode::FeeEstimationFailed,
-                                    "Failed to estimate fee",
-                                    e.to_string()
-                                );
-                                let response = ApiResponse::error(api_error);
-                                serde_json::to_value(response).unwrap_or_else(|_| {
-                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                })
                             }
                         }
-                    }
-                },
-            )?;
-        }
-
-        // Register estimate_l1_to_l2_message_fees_from_unsigned_tx method
-        {
-            let simulator_clone = simulator.clone();
-            let fee_estimator_clone = fee_estimator.clone();
-            module.register_async_method(
-                "estimate_l1_to_l2_message_fees_from_unsigned_tx",
-                move |params, _| {
-                    let simulator = simulator_clone.clone();
-                    let fee_estimator = fee_estimator_clone.clone();
-                    async move {
-                        info!(
-                        "estimate_l1_to_l2_message_fees_from_unsigned_tx called with params: {:?}",
-                        params
-                    );
-
-                        // Parse unsigned transaction data from params
-                        let transaction_data = match parse_unsigned_transaction_params(params) {
-                            Ok(tx) => tx,
-                            Err(e) => {
-                                error!("Failed to parse unsigned transaction parameters: {}", e);
-                                let api_error = ApiError::with_details(
-                                    ApiErrorCode::InvalidUnsignedTransaction,
-                                    "Invalid unsigned transaction",
-                                    e.to_string()
-                                );
-                                let response = ApiResponse::error(api_error);
-                                return serde_json::to_value(response).unwrap_or_else(|_| {
-                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                });
-                            }
-                        };
-
-                        // Simulate transaction to get receipt
-                        let simulator_guard = simulator.lock().await;
-                        let (_, receipt) = match simulator_guard
-                            .simulate_unsigned_tx_with_receipt(&transaction_data)
-                            .await
-                        {
-                            Ok(result) => result,
-                            Err(e) => {
-                                error!("Failed to simulate unsigned transaction: {}", e);
-                                let api_error = ApiError::with_details(
-                                    ApiErrorCode::TransactionSimulationFailed,
-                                    "Failed to simulate transaction",
-                                    e.to_string()
-                                );
-                                let response = ApiResponse::error(api_error);
-                                return serde_json::to_value(response).unwrap_or_else(|_| {
-                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                });
-                            }
-                        };
-
-                        // Parse L1 to L2 message events from receipt
-                        let message_events =
-                            match simulator_guard.parse_l1_to_l2_message_events(&receipt) {
-                                Ok(events) => events,
-                                Err(e) => {
-                                    error!(
-                                        "Failed to parse L1 to L2 message events from receipt: {}",
-                                        e
-                                    );
-                                    let api_error = ApiError::with_details(
-                                        ApiErrorCode::TransactionSimulationFailed,
-                                        "Failed to parse message events",
-                                        e.to_string()
-                                    );
-                                    let response = ApiResponse::error(api_error);
-                                    return serde_json::to_value(response).unwrap_or_else(|_| {
-                                        serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                    });
-                                }
-                            };
-
-                        // Estimate fees using Starknet fee estimator
-                        let fee_estimator_guard = fee_estimator.lock().await;
-                        match fee_estimator_guard
-                            .estimate_messages_fee(message_events)
-                            .await
-                        {
-                            Ok(summary) => {
-                                let response = ApiResponse::success(summary);
-                                serde_json::to_value(response).unwrap_or_else(|_| {
-                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                })
-                            }
-                            Err(e) => {
-                                error!("L1 to L2 message fee estimation failed: {}", e);
-                                let api_error = ApiError::with_details(
-                                    ApiErrorCode::FeeEstimationFailed,
-                                    "Failed to estimate fee",
-                                    e.to_string()
-                                );
-                                let response = ApiResponse::error(api_error);
-                                serde_json::to_value(response).unwrap_or_else(|_| {
-                                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                })
-                            }
+                        Err(e) => {
+                            error!("Transaction simulation failed: {}", e);
+                            let api_error = ApiError::with_details(
+                                ApiErrorCode::TransactionSimulationFailed,
+                                "Failed to simulate signed transaction",
+                                e.to_string()
+                            );
+                            let response = ApiResponse::error(api_error);
+                            serde_json::to_value(response).unwrap_or_else(|_| {
+                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                            })
                         }
                     }
-                },
-            )?;
+                }
+            })?;
         }
 
         let handle = server.start(module);
-
         info!("JSON-RPC server started on {}", addr);
 
         // Keep the server running
@@ -332,7 +346,7 @@ impl RpcServer {
 }
 
 /// Parse signed transaction parameters from JSON-RPC params
-fn parse_signed_transaction_params(params: jsonrpsee::types::Params) -> Result<TxEnvelope> {
+fn parse_signed_transaction_params(params: &jsonrpsee::types::Params) -> Result<TxEnvelope> {
     let params_value: serde_json::Value = params.parse()?;
 
     // Extract raw transaction data from params
@@ -360,7 +374,7 @@ fn parse_signed_transaction_params(params: jsonrpsee::types::Params) -> Result<T
 
 /// Parse unsigned transaction parameters from JSON-RPC params
 fn parse_unsigned_transaction_params(
-    params: jsonrpsee::types::Params,
+    params: &jsonrpsee::types::Params,
 ) -> Result<UnsignedTransactionData> {
     let params_value: serde_json::Value = params.parse()?;
 
@@ -385,7 +399,7 @@ fn parse_unsigned_transaction_params(
     let to = tx_data
         .get("to")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .map(ToString::to_string);
 
     let value = tx_data
         .get("value")
@@ -402,24 +416,24 @@ fn parse_unsigned_transaction_params(
     let gas_limit = tx_data
         .get("gas")
         .or_else(|| tx_data.get("gasLimit"))
-        .and_then(|v| v.as_u64());
+        .and_then(serde_json::Value::as_u64);
 
     let gas_price = tx_data
         .get("gasPrice")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .map(ToString::to_string);
 
     let max_fee_per_gas = tx_data
         .get("maxFeePerGas")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .map(ToString::to_string);
 
     let max_priority_fee_per_gas = tx_data
         .get("maxPriorityFeePerGas")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .map(ToString::to_string);
 
-    let nonce = tx_data.get("nonce").and_then(|v| v.as_u64());
+    let nonce = tx_data.get("nonce").and_then(serde_json::Value::as_u64);
 
     Ok(UnsignedTransactionData {
         from,
@@ -436,7 +450,7 @@ fn parse_unsigned_transaction_params(
 
 /// Parse L1 to L2 message event parameters from JSON-RPC params
 fn parse_l1_to_l2_message_params(
-    params: jsonrpsee::types::Params,
+    params: &jsonrpsee::types::Params,
 ) -> Result<Vec<L1ToL2MessageSentEvent>> {
     use starknet::core::types::{EthAddress, Felt};
 
@@ -568,7 +582,7 @@ mod tests {
         let params_json = json!([raw_tx_hex]);
         let params = create_params(params_json);
 
-        let result = parse_signed_transaction_params(params);
+        let result = parse_signed_transaction_params(&params);
         // Should fail because it's not a valid transaction format for this test, but should not panic
         assert!(result.is_err());
     }
@@ -580,7 +594,7 @@ mod tests {
         let params_json = json!([raw_tx_hex]);
         let params = create_params(params_json);
 
-        let result = parse_signed_transaction_params(params);
+        let result = parse_signed_transaction_params(&params);
         // Should fail because it's not a valid transaction format for this test, but should not panic
         assert!(result.is_err());
     }
@@ -592,7 +606,7 @@ mod tests {
         let params_json = json!([invalid_hex]);
         let params = create_params(params_json);
 
-        let result = parse_signed_transaction_params(params);
+        let result = parse_signed_transaction_params(&params);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -605,7 +619,7 @@ mod tests {
         let params_json = json!([]);
         let params = create_params(params_json);
 
-        let result = parse_signed_transaction_params(params);
+        let result = parse_signed_transaction_params(&params);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -630,7 +644,7 @@ mod tests {
         let params_json = json!([tx_data]);
         let params = create_params(params_json);
 
-        let result = parse_unsigned_transaction_params(params).unwrap();
+        let result = parse_unsigned_transaction_params(&params).unwrap();
 
         assert_eq!(result.from, "0x742d35Cc6634C0532925a3b8D0b2f0e8e6F5DaBB");
         assert_eq!(
@@ -657,7 +671,7 @@ mod tests {
         let params_json = json!([tx_data]);
         let params = create_params(params_json);
 
-        let result = parse_unsigned_transaction_params(params).unwrap();
+        let result = parse_unsigned_transaction_params(&params).unwrap();
 
         assert_eq!(result.from, "0x742d35Cc6634C0532925a3b8D0b2f0e8e6F5DaBB");
         assert_eq!(result.to, None);
@@ -680,7 +694,7 @@ mod tests {
         let params_json = json!([tx_data]);
         let params = create_params(params_json);
 
-        let result = parse_unsigned_transaction_params(params);
+        let result = parse_unsigned_transaction_params(&params);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -698,7 +712,7 @@ mod tests {
         let params_json = json!([tx_data]);
         let params = create_params(params_json);
 
-        let result = parse_unsigned_transaction_params(params).unwrap();
+        let result = parse_unsigned_transaction_params(&params).unwrap();
 
         let expected_data =
             hex::decode("a9059cbb000000000000000000000000742d35cc6634c0532925a3b8d0b2f0e8e6f5dabb")
@@ -723,7 +737,7 @@ mod tests {
         });
         let params = create_params(params_json);
 
-        let result = parse_l1_to_l2_message_params(params).unwrap();
+        let result = parse_l1_to_l2_message_params(&params).unwrap();
 
         assert_eq!(result.len(), 1);
 
@@ -766,7 +780,7 @@ mod tests {
         });
         let params = create_params(params_json);
 
-        let result = parse_l1_to_l2_message_params(params).unwrap();
+        let result = parse_l1_to_l2_message_params(&params).unwrap();
 
         assert_eq!(result.len(), 2);
 
@@ -801,7 +815,7 @@ mod tests {
         });
         let params = create_params(params_json);
 
-        let result = parse_l1_to_l2_message_params(params);
+        let result = parse_l1_to_l2_message_params(&params);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -823,7 +837,7 @@ mod tests {
         });
         let params = create_params(params_json);
 
-        let result = parse_l1_to_l2_message_params(params);
+        let result = parse_l1_to_l2_message_params(&params);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -838,7 +852,7 @@ mod tests {
         });
         let params = create_params(params_json);
 
-        let result = parse_l1_to_l2_message_params(params).unwrap();
+        let result = parse_l1_to_l2_message_params(&params).unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -849,7 +863,7 @@ mod tests {
         });
         let params = create_params(params_json);
 
-        let result = parse_l1_to_l2_message_params(params);
+        let result = parse_l1_to_l2_message_params(&params);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -867,7 +881,7 @@ mod tests {
 
         let params = create_params(tx_data);
 
-        let result = parse_unsigned_transaction_params(params).unwrap();
+        let result = parse_unsigned_transaction_params(&params).unwrap();
         assert_eq!(result.from, "0x742d35Cc6634C0532925a3b8D0b2f0e8e6F5DaBB");
         assert_eq!(result.value, "0x123");
     }
@@ -886,7 +900,7 @@ mod tests {
         });
         let params = create_params(params_json);
 
-        let result = parse_l1_to_l2_message_params(params);
+        let result = parse_l1_to_l2_message_params(&params);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("expected string"));
     }

@@ -102,6 +102,14 @@ pub struct L1ToL2MessageSentEvent {
 }
 
 /// Simulate a transaction and return both gas used and receipt for event inspection
+///
+/// # Errors
+///
+/// Returns an error if the transaction simulation fails due to network issues or invalid transaction data
+///
+/// # Panics
+///
+/// Panics if the Anvil instance cannot be spawned
 pub async fn simulate_tx_with_receipt(
     rpc_url: &str,
     target_tx: &TxEnvelope,
@@ -122,6 +130,14 @@ pub async fn simulate_tx_with_receipt(
 }
 
 /// Simulate an unsigned transaction with account impersonation and return both gas used and receipt
+///
+/// # Errors
+///
+/// Returns an error if the transaction simulation fails due to network issues or invalid transaction data
+///
+/// # Panics
+///
+/// Panics if the Anvil instance cannot be spawned
 pub async fn simulate_unsigned_tx_with_receipt(
     rpc_url: &str,
     unsigned_tx: &UnsignedTransactionData,
@@ -293,6 +309,10 @@ pub struct NetworkConfig {
 
 impl TransactionSimulator {
     /// Create a new transaction simulator with the given configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network configuration is invalid
     pub fn new(network_config: NetworkConfig) -> Result<Self> {
         info!(
             "Creating new TransactionSimulator with config: {:?}",
@@ -308,6 +328,10 @@ impl TransactionSimulator {
     }
 
     /// Simulate a transaction envelope and return both gas used and receipt
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the transaction simulation fails due to network issues or invalid transaction data
     pub async fn simulate_tx_envelope_with_receipt(
         &self,
         target_tx: &TxEnvelope,
@@ -317,6 +341,10 @@ impl TransactionSimulator {
     }
 
     /// Simulate an unsigned transaction with account impersonation and return both gas used and receipt
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the transaction simulation fails due to network issues or invalid transaction data
     pub async fn simulate_unsigned_tx_with_receipt(
         &self,
         unsigned_tx: &UnsignedTransactionData,
@@ -329,8 +357,11 @@ impl TransactionSimulator {
     }
 
     /// Parse Starknet L1 to L2 message events from a transaction receipt
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the receipt cannot be parsed or contains invalid event data
     pub fn parse_l1_to_l2_message_events(
-        &self,
         receipt: &alloy::rpc::types::TransactionReceipt,
     ) -> Result<Vec<L1ToL2MessageSentEvent>> {
         parse_starknet_l1_to_l2_message_sent_events(receipt)
@@ -541,7 +572,7 @@ mod tests {
         let anvil = Anvil::new()
             .arg("--fork-url")
             .arg("https://reth-ethereum.ithaca.xyz/rpc")
-            .fork_block_number(23113921)
+            .fork_block_number(23113920)
             .try_spawn()
             .unwrap();
         let provider = ProviderBuilder::new().connect_http(anvil.endpoint_url());
@@ -551,12 +582,6 @@ mod tests {
         println!("Block number: {}", block_number);
 
         // tx to simulate https://etherscan.io/tx/0xd5fdee26751ba7175444cb587c1b1ddeca3a0d22cbf87bf0c1d6b4d263c6a699
-
-        let balance = provider
-            .get_balance(address!("0x11Dd734a52Cd2EE23FFe8B5054F5A8ECF5D1Ad50"))
-            .await
-            .unwrap();
-        println!("Balance: {}", balance);
 
         let contract_tx = TxEip1559 {
             chain_id: 1,
@@ -596,7 +621,7 @@ mod tests {
         // Print all events emitted by the transaction
         print_transaction_events(&receipt);
 
-        let l1_to_l2_logs = simulator.parse_l1_to_l2_message_events(&receipt).unwrap();
+        let l1_to_l2_logs = TransactionSimulator::parse_l1_to_l2_message_events(&receipt).unwrap();
         println!(
             "Found {} L1 to L2 message sent events:",
             l1_to_l2_logs.len()
@@ -889,7 +914,7 @@ mod tests {
         let anvil = Anvil::new()
             .arg("--fork-url")
             .arg("https://reth-ethereum.ithaca.xyz/rpc")
-            .fork_block_number(23113921)
+            .fork_block_number(23113920)
             .try_spawn()
             .unwrap();
 
@@ -923,7 +948,7 @@ mod tests {
         print_transaction_events(&receipt);
 
         // Parse L1 to L2 message events from the receipt
-        let l1_to_l2_logs = simulator.parse_l1_to_l2_message_events(&receipt).unwrap();
+        let l1_to_l2_logs = TransactionSimulator::parse_l1_to_l2_message_events(&receipt).unwrap();
         println!(
             "Found {} L1 to L2 message sent events:",
             l1_to_l2_logs.len()
@@ -1235,7 +1260,7 @@ mod tests {
         );
 
         // Parse L1ToL2MessageSent events (should be 2 for double deposit)
-        let l1_to_l2_logs = simulator.parse_l1_to_l2_message_events(&receipt).unwrap();
+        let l1_to_l2_logs = TransactionSimulator::parse_l1_to_l2_message_events(&receipt).unwrap();
         println!("Found {} L1ToL2MessageSent events:", l1_to_l2_logs.len());
 
         for (i, log) in l1_to_l2_logs.iter().enumerate() {

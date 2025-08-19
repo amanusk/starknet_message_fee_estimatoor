@@ -25,6 +25,11 @@ pub struct StarknetConfig {
 }
 
 impl Settings {
+    /// Load settings from configuration sources
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration cannot be loaded or parsed
     pub fn new() -> Result<Self, config::ConfigError> {
         let settings = config::Config::builder()
             // Start with default values
@@ -44,6 +49,11 @@ impl Settings {
         settings.try_deserialize()
     }
 
+    /// Parse the server address from host and port
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the host and port cannot be parsed as a valid socket address
     pub fn server_addr(&self) -> Result<SocketAddr, std::net::AddrParseError> {
         format!("{}:{}", self.server.host, self.server.port).parse()
     }
