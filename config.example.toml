@@ -1,27 +1,16 @@
-# Example configuration file for Ethereum to Starknet Fee Estimation Server
-# Copy this file to 'config.toml' and modify the values as needed
-
 [server]
-# Host address to bind the server to
 host = "127.0.0.1"
-
-# Port to run the JSON-RPC server on
 port = 8080
 
 [ethereum]
-# Ethereum RPC endpoint URL
-# Examples:
-# - Local node: "http://localhost:8545"
-# - Infura: "https://mainnet.infura.io/v3/YOUR_PROJECT_ID"
-# - Alchemy: "https://eth-mainnet.alchemyapi.io/v2/YOUR_API_KEY"
-# - Ankr: "https://rpc.ankr.com/eth"
 endpoint = "http://localhost:8545"
 
 [starknet]
-# Starknet RPC endpoint URL
-# Examples:
-# - Mainnet (Public): "https://starknet-mainnet.public.blastapi.io"
-# - Mainnet (Infura): "https://starknet-mainnet.infura.io/v3/YOUR_PROJECT_ID"
-# - Testnet: "https://starknet-sepolia.public.blastapi.io"
-# - Local: "http://localhost:5050"
 endpoint = "https://starknet-mainnet.public.blastapi.io"
+
+[logging]
+level = "debug"
+log_file = "logs/test_starknet_fee_estimator.log"
+max_file_size_mb = 5
+max_files = 3
+enable_console = true

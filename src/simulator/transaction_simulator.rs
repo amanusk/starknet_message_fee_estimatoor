@@ -1,8 +1,8 @@
 use eyre::{eyre, Report as ErrReport, Result};
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
-use tracing::info;
 
 use alloy::{
     consensus::TxEnvelope,
@@ -271,35 +271,35 @@ fn parse_starknet_l1_to_l2_message_sent_events(
     Ok(decoded_events)
 }
 
-/// Print detailed transaction events from a receipt (useful for debugging)
+/// Log detailed transaction events from a receipt (useful for debugging)
 #[allow(dead_code)]
 pub fn print_transaction_events(receipt: &alloy::rpc::types::TransactionReceipt) {
-    println!("Transaction Events:");
-    println!("==================");
+    debug!("Transaction Events:");
+    debug!("==================");
     let logs = receipt.logs();
     if logs.is_empty() {
-        println!("No events emitted");
+        debug!("No events emitted");
     } else {
         for (i, log) in logs.iter().enumerate() {
-            println!("Event {}:", i + 1);
-            println!("  Address: {}", log.address());
-            println!("  Topics: {:?}", log.topics());
-            println!("  Data: {:?}", log.data());
-            println!("  Block Number: {}", log.block_number.unwrap_or(0));
-            println!(
+            debug!("Event {}:", i + 1);
+            debug!("  Address: {}", log.address());
+            debug!("  Topics: {:?}", log.topics());
+            debug!("  Data: {:?}", log.data());
+            debug!("  Block Number: {}", log.block_number.unwrap_or(0));
+            debug!(
                 "  Transaction Hash: {}",
                 log.transaction_hash.unwrap_or_default()
             );
-            println!("  Log Index: {}", log.log_index.unwrap_or(0));
-            println!(
+            debug!("  Log Index: {}", log.log_index.unwrap_or(0));
+            debug!(
                 "  Transaction Index: {}",
                 log.transaction_index.unwrap_or(0)
             );
-            println!("  Removed: {}", log.removed);
-            println!("---");
+            debug!("  Removed: {}", log.removed);
+            debug!("---");
         }
     }
-    println!("==================");
+    debug!("==================");
 }
 
 #[derive(Debug, Clone)]
@@ -387,6 +387,7 @@ mod tests {
         primitives::{address, b256, hex, utils::parse_ether, Signature, TxKind},
         signers::local::PrivateKeySigner,
     };
+    use log::{debug, error, info, warn};
 
     #[tokio::test]
     async fn test_simulator_creation() {
@@ -462,7 +463,7 @@ mod tests {
         assert!(gas_used > 0, "Gas used should be greater than 0");
         assert!(gas_used <= 21000, "Gas used should not exceed gas limit");
 
-        println!("Simulated transaction gas used: {}", gas_used);
+        info!("Simulated transaction gas used: {}", gas_used);
     }
 
     #[tokio::test]
@@ -563,7 +564,7 @@ mod tests {
         assert!(gas_used > 0, "Gas used should be greater than 0");
         assert!(gas_used <= 100000, "Gas used should not exceed gas limit");
 
-        println!("Simulated contract transaction gas used: {}", gas_used);
+        info!("Simulated contract transaction gas used: {}", gas_used);
     }
 
     #[tokio::test]
@@ -579,7 +580,7 @@ mod tests {
 
         let _chain_id = provider.get_chain_id().await.unwrap();
         let block_number = provider.get_block_number().await.unwrap();
-        println!("Block number: {}", block_number);
+        info!("Block number: {}", block_number);
 
         // tx to simulate https://etherscan.io/tx/0xd5fdee26751ba7175444cb587c1b1ddeca3a0d22cbf87bf0c1d6b4d263c6a699
 
@@ -622,16 +623,16 @@ mod tests {
         print_transaction_events(&receipt);
 
         let l1_to_l2_logs = TransactionSimulator::parse_l1_to_l2_message_events(&receipt).unwrap();
-        println!(
+        info!(
             "Found {} L1 to L2 message sent events:",
             l1_to_l2_logs.len()
         );
         for (i, log) in l1_to_l2_logs.iter().enumerate() {
-            println!("  Event {}:", i + 1);
-            println!("    from_address: {:?}", log.from_address);
-            println!("    to_address: {}", log.l2_address);
-            println!("    selector: {}", log.selector);
-            println!("    payload: {:?}", log.payload);
+            debug!("  Event {}:", i + 1);
+            debug!("    from_address: {:?}", log.from_address);
+            debug!("    to_address: {}", log.l2_address);
+            debug!("    selector: {}", log.selector);
+            debug!("    payload: {:?}", log.payload);
         }
 
         // Assertions for the test
@@ -765,8 +766,8 @@ mod tests {
         assert_eq!(receipt.from, alice, "From address should match");
         assert_eq!(receipt.to, Some(bob), "To address should match");
 
-        println!("Simulated unsigned transaction gas used: {}", gas_used);
-        println!("Transaction hash: {:?}", receipt.transaction_hash);
+        info!("Simulated unsigned transaction gas used: {}", gas_used);
+        debug!("Transaction hash: {:?}", receipt.transaction_hash);
     }
 
     #[tokio::test]
@@ -846,7 +847,7 @@ mod tests {
             "To address should match contract"
         );
 
-        println!(
+        info!(
             "Simulated unsigned contract transaction gas used: {}",
             gas_used
         );
@@ -899,7 +900,7 @@ mod tests {
         assert_eq!(receipt.from, alice, "From address should match");
         assert_eq!(receipt.to, Some(bob), "To address should match");
 
-        println!(
+        info!(
             "Simulated unsigned EIP-1559 transaction gas used: {}",
             gas_used
         );
@@ -949,16 +950,16 @@ mod tests {
 
         // Parse L1 to L2 message events from the receipt
         let l1_to_l2_logs = TransactionSimulator::parse_l1_to_l2_message_events(&receipt).unwrap();
-        println!(
+        info!(
             "Found {} L1 to L2 message sent events:",
             l1_to_l2_logs.len()
         );
         for (i, log) in l1_to_l2_logs.iter().enumerate() {
-            println!("  Event {}:", i + 1);
-            println!("    from_address: {:?}", log.from_address);
-            println!("    to_address: {}", log.l2_address);
-            println!("    selector: {}", log.selector);
-            println!("    payload: {:?}", log.payload);
+            debug!("  Event {}:", i + 1);
+            debug!("    from_address: {:?}", log.from_address);
+            debug!("    to_address: {}", log.l2_address);
+            debug!("    selector: {}", log.selector);
+            debug!("    payload: {:?}", log.payload);
         }
 
         // Verify the gas usage is reasonable
@@ -1062,11 +1063,11 @@ mod tests {
             );
         }
 
-        println!(
+        info!(
             "Successfully simulated unsigned Starknet deposit transaction with gas used: {}",
             gas_used
         );
-        println!("All L1ToL2MessageSent event validations passed!");
+        info!("All L1ToL2MessageSent event validations passed!");
     }
 
     #[tokio::test]
@@ -1086,7 +1087,7 @@ mod tests {
 
         // Check if contract is deployed by looking at bytecode
         let bytecode = provider.get_code_at(double_deposit_address).await.unwrap();
-        println!("Contract bytecode length: {} bytes", bytecode.len());
+        info!("Contract bytecode length: {} bytes", bytecode.len());
         if bytecode.is_empty() {
             panic!(
                 "DoubleDeposit contract is not deployed at address {}",
@@ -1100,7 +1101,7 @@ mod tests {
 
         // Check Vitalik's balance
         let balance = provider.get_balance(vitalik_addr).await.unwrap();
-        println!(
+        info!(
             "Vitalik's balance: {} ETH",
             balance.to::<u128>() as f64 / 1e18
         );
@@ -1116,7 +1117,7 @@ mod tests {
             .unwrap();
 
         let new_balance = provider.get_balance(vitalik_addr).await.unwrap();
-        println!(
+        info!(
             "Vitalik's new balance: {} ETH",
             new_balance.to::<u128>() as f64 / 1e18
         );
@@ -1137,14 +1138,14 @@ mod tests {
         let estimated_fees = parse_ether("0.01").unwrap(); // 0.01 ETH for fees (generous)
         let total_value = amount1 + amount2 + estimated_fees;
 
-        println!("Sending transaction with:");
-        println!("  amount1: {} ETH", amount1.to::<u128>() as f64 / 1e18);
-        println!("  amount2: {} ETH", amount2.to::<u128>() as f64 / 1e18);
-        println!(
+        info!("Sending transaction with:");
+        info!("  amount1: {} ETH", amount1.to::<u128>() as f64 / 1e18);
+        info!("  amount2: {} ETH", amount2.to::<u128>() as f64 / 1e18);
+        info!(
             "  estimated_fees: {} ETH",
             estimated_fees.to::<u128>() as f64 / 1e18
         );
-        println!(
+        info!(
             "  total_value: {} ETH",
             total_value.to::<u128>() as f64 / 1e18
         );
@@ -1186,21 +1187,21 @@ mod tests {
         let (gas_used, receipt) = match result {
             Ok((gas, receipt)) => (gas, receipt),
             Err(e) => {
-                println!("Transaction failed with error: {}", e);
+                error!("Transaction failed with error: {}", e);
                 panic!("Transaction execution failed: {}", e);
             }
         };
 
         // Debug transaction details
-        println!("Transaction status: {}", receipt.status());
-        println!("Transaction hash: {:?}", receipt.transaction_hash);
-        println!("Gas used: {}", gas_used);
-        println!("Gas limit: {}", unsigned_tx.gas_limit.unwrap_or(0));
-        println!("Value sent: {} ETH", total_value.to::<u128>() as f64 / 1e18);
+        info!("Transaction status: {}", receipt.status());
+        debug!("Transaction hash: {:?}", receipt.transaction_hash);
+        info!("Gas used: {}", gas_used);
+        info!("Gas limit: {}", unsigned_tx.gas_limit.unwrap_or(0));
+        info!("Value sent: {} ETH", total_value.to::<u128>() as f64 / 1e18);
 
         // If transaction failed, let's continue to see what events might have been emitted
         if !receipt.status() {
-            println!("⚠️  Transaction reverted, but continuing to analyze events...");
+            warn!("⚠️  Transaction reverted, but continuing to analyze events...");
         }
         assert!(gas_used > 0, "Gas used should be greater than 0");
         assert!(gas_used <= 300000, "Gas used should not exceed gas limit");
@@ -1208,7 +1209,7 @@ mod tests {
         // Verify transaction was successful
         assert!(receipt.status(), "Transaction should be successful");
 
-        println!(
+        info!(
             "Simulated double deposit transaction gas used: {}",
             gas_used
         );
@@ -1220,17 +1221,17 @@ mod tests {
             .filter_map(|log| DoubleDeposit::DoubleDepositExecuted::decode_log(log.as_ref()).ok())
             .collect();
 
-        println!(
+        info!(
             "Found {} DoubleDepositExecuted events:",
             deposit_events.len()
         );
         for (i, event) in deposit_events.iter().enumerate() {
-            println!("  Event {}:", i + 1);
-            println!("    amount1: {}", event.amount1);
-            println!("    amount2: {}", event.amount2);
-            println!("    l2Recipient1: {}", event.l2Recipient1);
-            println!("    l2Recipient2: {}", event.l2Recipient2);
-            println!("    totalEthSent: {}", event.totalEthSent);
+            debug!("  Event {}:", i + 1);
+            debug!("    amount1: {}", event.amount1);
+            debug!("    amount2: {}", event.amount2);
+            debug!("    l2Recipient1: {}", event.l2Recipient1);
+            debug!("    l2Recipient2: {}", event.l2Recipient2);
+            debug!("    totalEthSent: {}", event.totalEthSent);
         }
 
         // Verify exactly one DoubleDepositExecuted event is emitted
@@ -1261,14 +1262,14 @@ mod tests {
 
         // Parse L1ToL2MessageSent events (should be 2 for double deposit)
         let l1_to_l2_logs = TransactionSimulator::parse_l1_to_l2_message_events(&receipt).unwrap();
-        println!("Found {} L1ToL2MessageSent events:", l1_to_l2_logs.len());
+        info!("Found {} L1ToL2MessageSent events:", l1_to_l2_logs.len());
 
         for (i, log) in l1_to_l2_logs.iter().enumerate() {
-            println!("  L1ToL2 Event {}:", i + 1);
-            println!("    from_address: {:?}", log.from_address);
-            println!("    to_address: {}", log.l2_address);
-            println!("    selector: {}", log.selector);
-            println!("    payload: {:?}", log.payload);
+            debug!("  L1ToL2 Event {}:", i + 1);
+            debug!("    from_address: {:?}", log.from_address);
+            debug!("    to_address: {}", log.l2_address);
+            debug!("    selector: {}", log.selector);
+            debug!("    payload: {:?}", log.payload);
         }
 
         // Verify exactly two L1ToL2MessageSent events are emitted (one for each deposit)

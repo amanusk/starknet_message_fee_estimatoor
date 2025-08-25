@@ -765,6 +765,99 @@ async fn test_server_health() {
     assert_eq!(response_json["id"], 1);
 }
 
+#[tokio::test]
+#[serial]
+async fn test_error_propagation_when_all_messages_fail() {
+    let _addr = setup_test_environment().await;
+
+    // Test data for L1 to L2 message fees that should fail for all messages
+    // Using invalid addresses and selectors that will cause fee estimation to fail
+    let params = json!([{
+        "messages": [
+            {
+                "from_address": "0x8453FC6Cd1bCfE8D4dFC069C400B433054d47bDc",
+                "l2_address": "0x0000000000000000000000000000000000000000000000000000000000000000", // Invalid L2 address
+                "selector": "0x0000000000000000000000000000000000000000000000000000000000000000", // Invalid selector
+                "payload": [
+                    "0x0000000000000000000000000000000000000000000000000000000000000000"
+                ]
+            },
+            {
+                "from_address": "0x742d35Cc6634C0532925a3b8D0b2f0e8e6F5DaBB",
+                "l2_address": "0x0000000000000000000000000000000000000000000000000000000000000001", // Another invalid L2 address
+                "selector": "0x0000000000000000000000000000000000000000000000000000000000000001", // Another invalid selector
+                "payload": [
+                    "0x0000000000000000000000000000000000000000000000000000000000000001"
+                ]
+            }
+        ]
+    }]);
+
+    let response = timeout(
+        Duration::from_secs(30),
+        send_rpc_request("estimate_l1_to_l2_message_fees", params),
+    )
+    .await
+    .expect("Request timeout")
+    .expect("Request failed");
+
+    println!(
+        "test_error_propagation_when_all_messages_fail response: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
+
+    // Verify JSON-RPC structure
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 1);
+
+    // The response should contain a result field (JSON-RPC wrapper)
+    assert!(response.get("result").is_some());
+    let api_response = response.get("result").unwrap();
+
+    // Since all messages failed, we should get an error response, not a success response
+    assert!(
+        api_response.get("error").is_some(),
+        "Expected error response when all messages fail, but got: {}",
+        api_response
+    );
+    assert!(
+        api_response.get("result").is_none(),
+        "Expected no success result when all messages fail, but got: {}",
+        api_response
+    );
+
+    let error = api_response.get("error").unwrap();
+    println!("API Error: {}", error);
+
+    // Validate error structure
+    assert!(error.get("code").is_some());
+    assert!(error.get("message").is_some());
+    assert!(error.get("data").is_some()); // Should have error details
+
+    // The error code should be fee_estimation_failed
+    let code = error.get("code").unwrap().as_str().unwrap();
+    assert_eq!(code, "fee_estimation_failed", "Expected fee_estimation_failed error code");
+
+    // The message should indicate that all messages failed
+    let message = error.get("message").unwrap().as_str().unwrap();
+    assert!(
+        message.contains("Failed to estimate fees for all L1 to L2 messages"),
+        "Expected error message about all messages failing, but got: {}",
+        message
+    );
+
+    // The data should contain error details
+    let data = error.get("data").unwrap().as_str().unwrap();
+    assert!(
+        !data.is_empty(),
+        "Expected error data to contain details about the failures"
+    );
+    assert!(
+        data.contains("Message 1:") || data.contains("Message 2:"),
+        "Expected error data to contain message-specific error details"
+    );
+}
+
 /// Cleanup test that runs last to stop Anvil
 #[tokio::test]
 #[serial]
