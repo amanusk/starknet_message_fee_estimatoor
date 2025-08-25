@@ -30,7 +30,7 @@ fn handle_fee_estimation_response(
                 let error_details = summary.errors.join("; ");
                 let api_error = ApiError::with_details(
                     ApiErrorCode::FeeEstimationFailed,
-                    &format!(
+                    format!(
                         "Failed to estimate fees for all L1 to L2 messages - {}",
                         error_context
                     ),
@@ -51,7 +51,7 @@ fn handle_fee_estimation_response(
             error!("Fee estimation failed: {}", e);
             let api_error = ApiError::with_details(
                 ApiErrorCode::FeeEstimationFailed,
-                &format!(
+                format!(
                     "Failed to estimate fees for L1 to L2 messages - {}",
                     error_context
                 ),

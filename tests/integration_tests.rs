@@ -836,7 +836,10 @@ async fn test_error_propagation_when_all_messages_fail() {
 
     // The error code should be fee_estimation_failed
     let code = error.get("code").unwrap().as_str().unwrap();
-    assert_eq!(code, "fee_estimation_failed", "Expected fee_estimation_failed error code");
+    assert_eq!(
+        code, "fee_estimation_failed",
+        "Expected fee_estimation_failed error code"
+    );
 
     // The message should indicate that all messages failed
     let message = error.get("message").unwrap().as_str().unwrap();
