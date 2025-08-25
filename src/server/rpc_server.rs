@@ -9,6 +9,7 @@ use eyre::{eyre, Result};
 use jsonrpsee::server::ServerBuilder;
 use jsonrpsee::RpcModule;
 use std::net::SocketAddr;
+use std::str::FromStr;
 use tracing::{error, info};
 
 use crate::fee_estimator::FeeEstimationSummary;
@@ -62,6 +63,48 @@ fn handle_fee_estimation_response(
                 serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
             })
         }
+    }
+}
+
+/// Helper function to parse a value that can be either a hex string or an integer into a Felt
+fn parse_felt_from_value(
+    value: &serde_json::Value,
+    field_name: &str,
+    index: usize,
+) -> Result<starknet::core::types::Felt> {
+    use starknet::core::types::Felt;
+
+    match value {
+        serde_json::Value::String(s) => {
+            // Try to parse as hex string or decimal integer string
+            Felt::from_str(s).map_err(|e| {
+                eyre!(
+                    "Invalid {} '{}' in message {}: not a valid hex string or integer: {}",
+                    field_name,
+                    s,
+                    index,
+                    e
+                )
+            })
+        }
+        serde_json::Value::Number(n) => {
+            // Convert number to string and parse with Felt::from_str
+            let s = n.to_string();
+            Felt::from_str(&s).map_err(|e| {
+                eyre!(
+                    "Invalid {} '{}' in message {}: not a valid integer: {}",
+                    field_name,
+                    n,
+                    index,
+                    e
+                )
+            })
+        }
+        _ => Err(eyre!(
+            "Invalid {} in message {}: expected string (hex) or number (integer)",
+            field_name,
+            index
+        )),
     }
 }
 
@@ -455,7 +498,7 @@ fn parse_unsigned_transaction_params(
 fn parse_l1_to_l2_message_params(
     params: &jsonrpsee::types::Params,
 ) -> Result<Vec<L1ToL2MessageSentEvent>> {
-    use starknet::core::types::{EthAddress, Felt};
+    use starknet::core::types::EthAddress;
 
     let params_value: serde_json::Value = params.parse()?;
 
@@ -494,34 +537,16 @@ fn parse_l1_to_l2_message_params(
         })?;
 
         // Extract l2_address field
-        let l2_address_str = message
+        let l2_address_value = message
             .get("l2_address")
-            .and_then(|v| v.as_str())
             .ok_or_else(|| eyre!("Missing 'l2_address' in message {}", index))?;
-
-        let l2_address = Felt::from_hex(l2_address_str).map_err(|e| {
-            eyre!(
-                "Invalid l2_address '{}' in message {}: {}",
-                l2_address_str,
-                index,
-                e
-            )
-        })?;
+        let l2_address = parse_felt_from_value(l2_address_value, "l2_address", index)?;
 
         // Extract selector field
-        let selector_str = message
+        let selector_value = message
             .get("selector")
-            .and_then(|v| v.as_str())
             .ok_or_else(|| eyre!("Missing 'selector' in message {}", index))?;
-
-        let selector = Felt::from_hex(selector_str).map_err(|e| {
-            eyre!(
-                "Invalid selector '{}' in message {}: {}",
-                selector_str,
-                index,
-                e
-            )
-        })?;
+        let selector = parse_felt_from_value(selector_value, "selector", index)?;
 
         // Extract payload field
         let payload_array = message
@@ -531,23 +556,8 @@ fn parse_l1_to_l2_message_params(
 
         let mut payload = Vec::new();
         for (payload_index, payload_item) in payload_array.iter().enumerate() {
-            let payload_str = payload_item.as_str().ok_or_else(|| {
-                eyre!(
-                    "Invalid payload item {} in message {}: expected string",
-                    payload_index,
-                    index
-                )
-            })?;
-
-            let payload_felt = Felt::from_hex(payload_str).map_err(|e| {
-                eyre!(
-                    "Invalid payload item '{}' in message {}: {}",
-                    payload_str,
-                    index,
-                    e
-                )
-            })?;
-
+            let payload_felt =
+                parse_felt_from_value(payload_item, &format!("payload[{}]", payload_index), index)?;
             payload.push(payload_felt);
         }
 
@@ -895,7 +905,7 @@ mod tests {
             "from_address": "0x8453FC6Cd1bCfE8D4dFC069C400B433054d47bDc",
             "l2_address": "0x04c5772d1914fe6ce891b64eb35bf3522aeae1315647314aac58b01137607f3f",
             "selector": "0x02d757788a8d8d6f21d1cd40bce38a8222d70654214e96ff95d8086e684fbee5",
-            "payload": [123] // Invalid: should be string
+            "payload": [null] // Invalid: should be string or number
         });
 
         let params_json = json!({
@@ -905,6 +915,75 @@ mod tests {
 
         let result = parse_l1_to_l2_message_params(&params);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("expected string"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("expected string (hex) or number (integer)"));
+    }
+
+    #[test]
+    fn test_parse_l1_to_l2_message_params_with_integers() {
+        let message = json!({
+            "from_address": "0x8453FC6Cd1bCfE8D4dFC069C400B433054d47bDc",
+            "l2_address": 123456, // Integer instead of hex string
+            "selector": 987654, // Integer instead of hex string
+            "payload": [42, 100, 200] // Integers instead of hex strings
+        });
+
+        let params_json = json!({
+            "messages": [message]
+        });
+        let params = create_params(params_json);
+
+        let result = parse_l1_to_l2_message_params(&params);
+        assert!(result.is_ok());
+
+        let events = result.unwrap();
+        assert_eq!(events.len(), 1);
+
+        let event = &events[0];
+        assert_eq!(
+            event.l2_address,
+            starknet::core::types::Felt::from(123456u64)
+        );
+        assert_eq!(event.selector, starknet::core::types::Felt::from(987654u64));
+        assert_eq!(event.payload.len(), 3);
+        assert_eq!(event.payload[0], starknet::core::types::Felt::from(42u64));
+        assert_eq!(event.payload[1], starknet::core::types::Felt::from(100u64));
+        assert_eq!(event.payload[2], starknet::core::types::Felt::from(200u64));
+    }
+
+    #[test]
+    fn test_parse_l1_to_l2_message_params_mixed_types() {
+        let message = json!({
+            "from_address": "0x8453FC6Cd1bCfE8D4dFC069C400B433054d47bDc",
+            "l2_address": "0x04c5772d1914fe6ce891b64eb35bf3522aeae1315647314aac58b01137607f3f", // Hex string
+            "selector": 987654, // Integer
+            "payload": ["0x123", 456, "0x789"] // Mixed hex strings and integers
+        });
+
+        let params_json = json!({
+            "messages": [message]
+        });
+        let params = create_params(params_json);
+
+        let result = parse_l1_to_l2_message_params(&params);
+        assert!(result.is_ok());
+
+        let events = result.unwrap();
+        assert_eq!(events.len(), 1);
+
+        let event = &events[0];
+        assert_eq!(event.selector, starknet::core::types::Felt::from(987654u64));
+        assert_eq!(event.payload.len(), 3);
+        assert_eq!(
+            event.payload[0],
+            starknet::core::types::Felt::from_hex("0x123").unwrap()
+        );
+        assert_eq!(event.payload[1], starknet::core::types::Felt::from(456u64));
+        assert_eq!(
+            event.payload[2],
+            starknet::core::types::Felt::from_hex("0x789").unwrap()
+        );
     }
 }
