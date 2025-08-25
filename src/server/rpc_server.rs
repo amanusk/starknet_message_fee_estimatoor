@@ -11,6 +11,60 @@ use jsonrpsee::RpcModule;
 use std::net::SocketAddr;
 use tracing::{error, info};
 
+use crate::fee_estimator::FeeEstimationSummary;
+
+/// Helper function to handle fee estimation responses
+/// Returns a JSON-RPC response that properly handles cases where all messages fail
+fn handle_fee_estimation_response(
+    result: Result<FeeEstimationSummary, eyre::Error>,
+    error_context: &str,
+) -> serde_json::Value {
+    match result {
+        Ok(summary) => {
+            // Check if all messages failed to estimate
+            if summary.failed_estimates == summary.total_messages && summary.total_messages > 0 {
+                error!(
+                    "All {} messages failed fee estimation",
+                    summary.total_messages
+                );
+                let error_details = summary.errors.join("; ");
+                let api_error = ApiError::with_details(
+                    ApiErrorCode::FeeEstimationFailed,
+                    format!(
+                        "Failed to estimate fees for all L1 to L2 messages - {}",
+                        error_context
+                    ),
+                    error_details,
+                );
+                let response = ApiResponse::error(api_error);
+                serde_json::to_value(response).unwrap_or_else(|_| {
+                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                })
+            } else {
+                let response = ApiResponse::success(summary);
+                serde_json::to_value(response).unwrap_or_else(|_| {
+                    serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+                })
+            }
+        }
+        Err(e) => {
+            error!("Fee estimation failed: {}", e);
+            let api_error = ApiError::with_details(
+                ApiErrorCode::FeeEstimationFailed,
+                format!(
+                    "Failed to estimate fees for L1 to L2 messages - {}",
+                    error_context
+                ),
+                e.to_string(),
+            );
+            let response = ApiResponse::error(api_error);
+            serde_json::to_value(response).unwrap_or_else(|_| {
+                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
+            })
+        }
+    }
+}
+
 pub struct RpcServer {
     simulator: TransactionSimulator,
     fee_estimator: StarknetFeeEstimator,
@@ -102,29 +156,10 @@ impl RpcServer {
                     };
 
                     // Estimate fees using shared fee estimator instance
-                    match fee_estimator
-                        .estimate_messages_fee(message_events)
-                        .await
-                    {
-                        Ok(summary) => {
-                            let response = ApiResponse::success(summary);
-                            serde_json::to_value(response).unwrap_or_else(|_| {
-                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                            })
-                        }
-                        Err(e) => {
-                            error!("L1 to L2 message fee estimation failed: {}", e);
-                            let api_error = ApiError::with_details(
-                                ApiErrorCode::FeeEstimationFailed,
-                                "Failed to estimate L1 to L2 message fees",
-                                e.to_string()
-                            );
-                            let response = ApiResponse::error(api_error);
-                            serde_json::to_value(response).unwrap_or_else(|_| {
-                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                            })
-                        }
-                    }
+                    handle_fee_estimation_response(
+                        fee_estimator.estimate_messages_fee(message_events).await,
+                        "direct message estimation"
+                    )
                 }
             })?;
         }
@@ -180,26 +215,10 @@ impl RpcServer {
                                     }
 
                                     // Estimate fees for the extracted events
-                                    match fee_estimator.estimate_messages_fee(events).await {
-                                        Ok(summary) => {
-                                            let response = ApiResponse::success(summary);
-                                            serde_json::to_value(response).unwrap_or_else(|_| {
-                                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                            })
-                                        }
-                                        Err(e) => {
-                                            error!("Fee estimation failed: {}", e);
-                                            let api_error = ApiError::with_details(
-                                                ApiErrorCode::FeeEstimationFailed,
-                                                "Failed to estimate fees for L1 to L2 messages",
-                                                e.to_string()
-                                            );
-                                            let response = ApiResponse::error(api_error);
-                                            serde_json::to_value(response).unwrap_or_else(|_| {
-                                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                            })
-                                        }
-                                    }
+                                    handle_fee_estimation_response(
+                                        fee_estimator.estimate_messages_fee(events).await,
+                                        "unsigned transaction simulation"
+                                    )
                                 }
                                 Err(e) => {
                                     error!("Failed to parse L1 to L2 message events: {}", e);
@@ -283,26 +302,10 @@ impl RpcServer {
                                     }
 
                                     // Estimate fees for the extracted events
-                                    match fee_estimator.estimate_messages_fee(events).await {
-                                        Ok(summary) => {
-                                            let response = ApiResponse::success(summary);
-                                            serde_json::to_value(response).unwrap_or_else(|_| {
-                                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                            })
-                                        }
-                                        Err(e) => {
-                                            error!("Fee estimation failed: {}", e);
-                                            let api_error = ApiError::with_details(
-                                                ApiErrorCode::FeeEstimationFailed,
-                                                "Failed to estimate fees for L1 to L2 messages",
-                                                e.to_string()
-                                            );
-                                            let response = ApiResponse::error(api_error);
-                                            serde_json::to_value(response).unwrap_or_else(|_| {
-                                                serde_json::json!({"error": {"code": "internal_error", "message": "Failed to serialize response"}})
-                                            })
-                                        }
-                                    }
+                                    handle_fee_estimation_response(
+                                        fee_estimator.estimate_messages_fee(events).await,
+                                        "signed transaction simulation"
+                                    )
                                 }
                                 Err(e) => {
                                     error!("Failed to parse L1 to L2 message events: {}", e);

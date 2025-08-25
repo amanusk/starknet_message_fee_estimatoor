@@ -1,21 +1,23 @@
 mod api;
 mod config;
 mod fee_estimator;
+mod logging;
 mod server;
 mod simulator;
 
 use config::Settings;
 use eyre::Result;
+use log::{error, info};
 use server::RpcServer;
-use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing
-    tracing_subscriber::fmt::init();
-
-    // Load configuration
+    // Load configuration first
     let settings = Settings::new()?;
+
+    // Initialize logging with configuration
+    logging::init_logging(&settings.logging)?;
+
     info!("Loaded configuration: {:?}", settings);
 
     // Get server address

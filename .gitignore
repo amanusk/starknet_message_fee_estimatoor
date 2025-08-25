@@ -7,6 +7,7 @@
 config.toml
 config.yaml
 config.yml
+test_config.toml
 
 # Environment files
 .env

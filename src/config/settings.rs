@@ -6,6 +6,7 @@ pub struct Settings {
     pub server: ServerConfig,
     pub ethereum: EthereumConfig,
     pub starknet: StarknetConfig,
+    pub logging: LoggingConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -24,6 +25,15 @@ pub struct StarknetConfig {
     pub endpoint: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LoggingConfig {
+    pub level: String,
+    pub log_file: String,
+    pub max_file_size_mb: u64,
+    pub max_files: usize,
+    pub enable_console: bool,
+}
+
 impl Settings {
     /// Load settings from configuration sources
     ///
@@ -40,6 +50,11 @@ impl Settings {
                 "starknet.endpoint",
                 "https://starknet-mainnet.public.blastapi.io",
             )?
+            .set_default("logging.level", "info")?
+            .set_default("logging.log_file", "logs/starknet_fee_estimator.log")?
+            .set_default("logging.max_file_size_mb", 10)?
+            .set_default("logging.max_files", 5)?
+            .set_default("logging.enable_console", true)?
             // Add optional config file (if it exists)
             .add_source(config::File::with_name("config").required(false))
             // Override with environment variables (with APP_ prefix)

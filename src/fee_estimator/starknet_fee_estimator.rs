@@ -1,9 +1,9 @@
 use eyre::{eyre, Result};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 use starknet::core::types::{BlockId, BlockTag, Felt, MsgFromL1};
 use starknet::providers::{jsonrpc::HttpTransport, JsonRpcClient, Provider};
 use std::sync::Arc;
-use tracing::{error, info};
 
 use crate::simulator::transaction_simulator::L1ToL2MessageSentEvent;
 
@@ -191,6 +191,7 @@ impl StarknetFeeEstimator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use log::{debug, error, info};
     use starknet::core::types::Felt;
 
     #[test]
@@ -366,29 +367,29 @@ mod tests {
 
         let summary = result.unwrap();
 
-        // Print debug information first
-        println!("Fee estimation summary:");
-        println!("  Total messages: {}", summary.total_messages);
-        println!("  Successful estimates: {}", summary.successful_estimates);
-        println!("  Failed estimates: {}", summary.failed_estimates);
-        println!(
+        // Log debug information
+        info!("Fee estimation summary:");
+        info!("  Total messages: {}", summary.total_messages);
+        info!("  Successful estimates: {}", summary.successful_estimates);
+        info!("  Failed estimates: {}", summary.failed_estimates);
+        info!(
             "  Total fee: {} Wei ({:.6} ETH)",
             summary.total_fee_wei, summary.total_fee_eth
         );
-        println!(
+        info!(
             "  Individual estimates count: {}",
             summary.individual_estimates.len()
         );
-        println!("  Errors: {:?}", summary.errors);
+        debug!("  Errors: {:?}", summary.errors);
 
         // Verify summary metrics
         assert_eq!(summary.total_messages, 2, "Should have 2 total messages");
 
-        // If there are errors, print them and handle accordingly
+        // If there are errors, log them and handle accordingly
         if !summary.errors.is_empty() {
-            println!("Errors encountered:");
+            error!("Errors encountered:");
             for error in &summary.errors {
-                println!("  - {}", error);
+                error!("  - {}", error);
             }
         }
 
@@ -430,8 +431,8 @@ mod tests {
         assert!(estimate_2.gas_price > 0);
         assert!(estimate_2.overall_fee > 0);
 
-        println!("Message 1 fee: {} Wei", estimate_1.overall_fee);
-        println!("Message 2 fee: {} Wei", estimate_2.overall_fee);
+        info!("Message 1 fee: {} Wei", estimate_1.overall_fee);
+        info!("Message 2 fee: {} Wei", estimate_2.overall_fee);
 
         // Verify that total fee is the sum of individual fees
         let expected_total_fee: u128 = summary
@@ -451,12 +452,12 @@ mod tests {
             "ETH conversion should be accurate"
         );
 
-        println!("Double deposit fee estimation completed successfully:");
-        println!(
+        info!("Double deposit fee estimation completed successfully:");
+        info!(
             "  Total fee: {} Wei ({:.6} ETH)",
             summary.total_fee_wei, summary.total_fee_eth
         );
-        println!("  Both estimates succeeded!");
+        info!("  Both estimates succeeded!");
     }
 
     #[tokio::test]
@@ -490,7 +491,7 @@ mod tests {
             .await
             .unwrap();
 
-        println!("estimate: {:?}", estimate);
+        debug!("estimate: {:?}", estimate);
 
         assert!(estimate.l1_gas_consumed > 0);
         assert!(estimate.l1_gas_price > 0);
