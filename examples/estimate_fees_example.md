@@ -18,12 +18,12 @@ endpoint = "https://eth-mainnet.public.blastapi.io"
 endpoint = "https://starknet-mainnet.public.blastapi.io"
 ```
 
-Environment variables (with `APP_` prefix):
+Environment variables (with `ESTIMATOOR_` prefix):
 
-- `APP_SERVER_HOST=127.0.0.1`
-- `APP_SERVER_PORT=8080`
-- `APP_ETHEREUM_ENDPOINT=https://eth-mainnet.public.blastapi.io` (for L1 transaction simulation)
-- `APP_STARKNET_ENDPOINT=https://starknet-mainnet.public.blastapi.io` (for fee estimation)
+- `ESTIMATOOR_SERVER_HOST=127.0.0.1`
+- `ESTIMATOOR_SERVER_PORT=8080`
+- `ESTIMATOOR_ETHEREUM_ENDPOINT=https://eth-mainnet.public.blastapi.io` (for L1 transaction simulation)
+- `ESTIMATOOR_STARKNET_ENDPOINT=https://starknet-mainnet.public.blastapi.io` (for fee estimation)
 
 ## RPC Endpoint
 
@@ -244,7 +244,7 @@ cargo build --release
 cargo run
 
 # Run with custom environment variables
-APP_STARKNET_ENDPOINT=https://your-starknet-rpc.com cargo run
+ESTIMATOOR_STARKNET_ENDPOINT=https://your-starknet-rpc.com cargo run
 ```
 
 The service will start on `http://127.0.0.1:8080` by default.

@@ -51,13 +51,13 @@ cp config.example.toml config.toml
 
 #### Environment Variables
 
-You can override any configuration using environment variables with the `APP_` prefix:
+You can override any configuration using environment variables with the `ESTIMATOOR_` prefix:
 
 ```bash
-export APP_SERVER_HOST=127.0.0.1
-export APP_SERVER_PORT=8080
-export APP_ETHEREUM_ENDPOINT=http://localhost:8545
-export APP_STARKNET_ENDPOINT=https://starknet-mainnet.public.blastapi.io
+export ESTIMATOOR_SERVER_HOST=127.0.0.1
+export ESTIMATOOR_SERVER_PORT=8080
+export ESTIMATOOR_ETHEREUM_ENDPOINT=http://localhost:8545
+export ESTIMATOOR_STARKNET_ENDPOINT=https://starknet-mainnet.public.blastapi.io
 ```
 
 #### Configuration Options

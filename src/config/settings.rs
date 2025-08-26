@@ -57,8 +57,8 @@ impl Settings {
             .set_default("logging.enable_console", true)?
             // Add optional config file (if it exists)
             .add_source(config::File::with_name("config").required(false))
-            // Override with environment variables (with APP_ prefix)
-            .add_source(config::Environment::with_prefix("APP"))
+            // Override with environment variables (with ESTIMATOOR_ prefix)
+            .add_source(config::Environment::with_prefix("ESTIMATOOR"))
             .build()?;
 
         settings.try_deserialize()
