@@ -1,11 +1,14 @@
 use eyre::{eyre, Result};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
-use starknet::core::types::{BlockId, BlockTag, Felt, MsgFromL1};
-use starknet::providers::{jsonrpc::HttpTransport, JsonRpcClient, Provider};
+use starknet_rust::core::types::{BlockId, BlockTag, Felt, MsgFromL1};
+use starknet_rust::providers::{jsonrpc::HttpTransport, JsonRpcClient, Provider};
 use std::sync::Arc;
 
 use crate::simulator::transaction_simulator::L1ToL2MessageSentEvent;
+
+/// Mainnet RPC URL for Starknet
+pub const MAINNET_RPC_URL: &str = "https://pathfinder.rpc.mainnet.starknet.rs/rpc/v0_9";
 
 /// Configuration for the Starknet fee estimator
 #[derive(Debug, Clone)]
@@ -17,7 +20,7 @@ pub struct StarknetFeeEstimatorConfig {
 impl Default for StarknetFeeEstimatorConfig {
     fn default() -> Self {
         Self {
-            rpc_url: "https://pathfinder.rpc.mainnet.starknet.rs/rpc/v0_8".to_string(),
+            rpc_url: MAINNET_RPC_URL.to_string(),
             block_id: BlockId::Tag(BlockTag::Latest),
         }
     }
@@ -118,7 +121,7 @@ impl StarknetFeeEstimator {
             gas_consumed: fee_estimate.l1_gas_consumed,
             gas_price: fee_estimate.l1_gas_price,
             overall_fee: fee_estimate.overall_fee,
-            unit: format!("{:?}", fee_estimate.unit),
+            unit: "WEI".to_string(),
         })
     }
 
@@ -132,7 +135,7 @@ impl StarknetFeeEstimator {
         events: Vec<L1ToL2MessageSentEvent>,
     ) -> Result<FeeEstimationSummary> {
         let total_messages = events.len();
-        info!("Estimating fees for {} L1 to L2 messages", total_messages);
+        info!("Estimating fees for {total_messages} L1 to L2 messages");
 
         if events.is_empty() {
             return Ok(FeeEstimationSummary {
@@ -157,8 +160,8 @@ impl StarknetFeeEstimator {
                     individual_estimates.push(estimate);
                 }
                 Err(e) => {
-                    let error_msg = format!("Message {}: {}", index + 1, e);
-                    error!("{}", error_msg);
+                    let error_msg = format!("Message {}: {e}", index + 1);
+                    error!("{error_msg}");
                     errors.push(error_msg);
                 }
             }
@@ -172,8 +175,7 @@ impl StarknetFeeEstimator {
         let total_fee_eth = total_fee_wei as f64 / 1_000_000_000_000_000_000.0;
 
         info!(
-            "Fee estimation completed: {}/{} successful, total fee: {} Wei ({:.6} ETH)",
-            successful_estimates, total_messages, total_fee_wei, total_fee_eth
+            "Fee estimation completed: {successful_estimates}/{total_messages} successful, total fee: {total_fee_wei} Wei ({total_fee_eth:.6} ETH)"
         );
 
         Ok(FeeEstimationSummary {
@@ -192,7 +194,8 @@ impl StarknetFeeEstimator {
 mod tests {
     use super::*;
     use log::{debug, error, info};
-    use starknet::core::types::Felt;
+    use starknet_rust::core::types::Felt;
+    pub const TESTNET_RPC_URL: &str = "https://pathfinder.rpc.sepolia.starknet.rs/rpc/v0_9";
 
     #[test]
     fn test_fee_estimator_creation() {
@@ -203,8 +206,7 @@ mod tests {
 
     #[test]
     fn test_fee_estimator_from_url() {
-        let estimator =
-            StarknetFeeEstimator::from_url("https://pathfinder.rpc.mainnet.starknet.rs/rpc/v0_8");
+        let estimator = StarknetFeeEstimator::from_url(MAINNET_RPC_URL);
         assert!(estimator.is_ok());
     }
 
@@ -216,9 +218,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_events_list() {
-        let estimator =
-            StarknetFeeEstimator::from_url("https://pathfinder.rpc.mainnet.starknet.rs/rpc/v0_8")
-                .unwrap();
+        let estimator = StarknetFeeEstimator::from_url(MAINNET_RPC_URL).unwrap();
         let result = estimator.estimate_messages_fee(vec![]).await.unwrap();
 
         assert_eq!(result.total_messages, 0);
@@ -236,7 +236,7 @@ mod tests {
             total_messages: 2,
             successful_estimates: 1,
             failed_estimates: 1,
-            total_fee_wei: 1000000000000000000,
+            total_fee_wei: 1_000_000_000_000_000_000,
             total_fee_eth: 1.0,
             individual_estimates: vec![],
             errors: vec!["Test error".to_string()],
@@ -249,13 +249,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_single_message_fee_estimation() {
-        use starknet::core::types::{EthAddress, Felt};
+        use starknet_rust::core::types::{EthAddress, Felt};
         use std::str::FromStr;
 
         // Create fee estimator with Starknet mainnet endpoint
-        let estimator =
-            StarknetFeeEstimator::from_url("https://pathfinder.rpc.mainnet.starknet.rs/rpc/v0_8")
-                .unwrap();
+        let estimator = StarknetFeeEstimator::from_url(MAINNET_RPC_URL).unwrap();
 
         // Create a test message using values from the actual Starknet deposit transaction
         // These values are extracted from the test_starknet_deposit_tx test in transaction_simulator.rs
@@ -299,13 +297,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_double_deposit_fee_estimation() {
-        use starknet::core::types::{EthAddress, Felt};
+        use starknet_rust::core::types::{EthAddress, Felt};
         use std::str::FromStr;
 
         // Create fee estimator with Starknet mainnet endpoint
-        let estimator =
-            StarknetFeeEstimator::from_url("https://pathfinder.rpc.mainnet.starknet.rs/rpc/v0_8")
-                .unwrap();
+        let estimator = StarknetFeeEstimator::from_url(MAINNET_RPC_URL).unwrap();
 
         // Create the first test message using values from the actual Starknet deposit transaction
         // These values are extracted from the test_starknet_deposit_tx test in transaction_simulator.rs
@@ -389,7 +385,7 @@ mod tests {
         if !summary.errors.is_empty() {
             error!("Errors encountered:");
             for error in &summary.errors {
-                error!("  - {}", error);
+                error!("  - {error}");
             }
         }
 
@@ -462,11 +458,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_jsonrpc_estimate_message_fee_sanity_check() {
-        use starknet::core::types::EthAddress;
-        use starknet::providers::Url;
+        use starknet_rust::core::types::EthAddress;
+        use starknet_rust::providers::Url;
 
-        let rpc_url = std::env::var("STARKNET_RPC")
-            .unwrap_or_else(|_| "https://pathfinder.rpc.sepolia.starknet.rs/rpc/v0_8".into());
+        let rpc_url = std::env::var("STARKNET_RPC").unwrap_or_else(|_| TESTNET_RPC_URL.into());
         let rpc_client = JsonRpcClient::new(HttpTransport::new(Url::parse(&rpc_url).unwrap()));
 
         let estimate = rpc_client
@@ -491,7 +486,7 @@ mod tests {
             .await
             .unwrap();
 
-        debug!("estimate: {:?}", estimate);
+        debug!("estimate: {estimate:?}");
 
         assert!(estimate.l1_gas_consumed > 0);
         assert!(estimate.l1_gas_price > 0);

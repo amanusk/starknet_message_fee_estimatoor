@@ -14,7 +14,6 @@ pub fn init_logging(config: &LoggingConfig) -> Result<()> {
     let level_filter = match config.level.to_lowercase().as_str() {
         "trace" => LevelFilter::Trace,
         "debug" => LevelFilter::Debug,
-        "info" => LevelFilter::Info,
         "warn" => LevelFilter::Warn,
         "error" => LevelFilter::Error,
         _ => LevelFilter::Info,

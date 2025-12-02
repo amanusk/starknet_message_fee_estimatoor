@@ -1,7 +1,6 @@
 use eyre::{eyre, Report as ErrReport, Result};
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::str::FromStr;
 
 use alloy::{
@@ -17,40 +16,7 @@ use alloy::{
 };
 use serde_json::{json, Value};
 
-use starknet::core::types::{EthAddress, Felt};
-
-/// Represents the result of a transaction simulation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SimulationResult {
-    pub success: bool,
-    pub gas_used: u64,
-    pub return_data: Vec<u8>,
-    pub events: Vec<SimulationEvent>,
-    pub state_changes: HashMap<String, String>,
-    pub error_message: Option<String>,
-}
-
-/// Represents an event emitted during simulation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SimulationEvent {
-    pub address: String,
-    pub topics: Vec<String>,
-    pub data: Vec<u8>,
-}
-
-// SimulationError removed - using eyre::Result throughout
-
-/// Transaction data structure for simulation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransactionData {
-    pub from: String,
-    pub to: Option<String>,
-    pub value: String,
-    pub data: Vec<u8>,
-    pub gas_limit: u64,
-    pub gas_price: String,
-    pub nonce: u64,
-}
+use starknet_rust::core::types::{EthAddress, Felt};
 
 /// Unsigned transaction data structure for simulation with impersonation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -314,10 +280,7 @@ impl TransactionSimulator {
     ///
     /// Returns an error if the network configuration is invalid
     pub fn new(network_config: NetworkConfig) -> Result<Self> {
-        info!(
-            "Creating new TransactionSimulator with config: {:?}",
-            network_config
-        );
+        info!("Creating new TransactionSimulator with config: {network_config:?}");
 
         // Validate network configuration
         if network_config.l1_rpc_url.is_empty() {
@@ -349,10 +312,7 @@ impl TransactionSimulator {
         &self,
         unsigned_tx: &UnsignedTransactionData,
     ) -> Result<(u64, alloy::rpc::types::TransactionReceipt)> {
-        info!(
-            "Simulating unsigned transaction with impersonation: {:?}",
-            unsigned_tx
-        );
+        info!("Simulating unsigned transaction with impersonation: {unsigned_tx:?}");
         simulate_unsigned_tx_with_receipt(&self.network_config.l1_rpc_url, unsigned_tx).await
     }
 
@@ -525,7 +485,7 @@ mod tests {
         let mut contract_tx = TxEip1559 {
             chain_id,
             nonce: alice_nonce,
-            gas_limit: 100000, // Higher gas limit for contract interaction
+            gas_limit: 100_000, // Higher gas limit for contract interaction
             max_fee_per_gas: fee_u128,
             max_priority_fee_per_gas: one_gwei_u128,
             input: contract_data.into(),
@@ -562,7 +522,7 @@ mod tests {
         // Parse and display ERC20 transfer events
         // Verify that gas was used (should be higher than simple transfer)
         assert!(gas_used > 0, "Gas used should be greater than 0");
-        assert!(gas_used <= 100000, "Gas used should not exceed gas limit");
+        assert!(gas_used <= 100_000, "Gas used should not exceed gas limit");
 
         info!("Simulated contract transaction gas used: {}", gas_used);
     }
@@ -573,7 +533,7 @@ mod tests {
         let anvil = Anvil::new()
             .arg("--fork-url")
             .arg("https://reth-ethereum.ithaca.xyz/rpc")
-            .fork_block_number(23113920)
+            .fork_block_number(23_113_920)
             .try_spawn()
             .unwrap();
         let provider = ProviderBuilder::new().connect_http(anvil.endpoint_url());
@@ -588,11 +548,11 @@ mod tests {
             chain_id: 1,
             nonce: 58,
             gas_limit: 190_674,
-            max_fee_per_gas: 2306574200,
-            max_priority_fee_per_gas: 2000000000,
+            max_fee_per_gas: 2_306_574_200,
+            max_priority_fee_per_gas: 2_000_000_000,
             input: hex!("0x0efe6a8b000000000000000000000000ca14007eff0db1f8135f4c25b34de49ab0d42766000000000000000000000000000000000000000000004f9c6a3ec958b0de0000013cd2f10b45da0332429cea44028b89ee386cb2adfb9bb8f1c470bad6a1f8d1").into(),
             to: TxKind::Call(address!("0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4")),
-            value: U256::from(25344429452040_u128),
+            value: U256::from(25_344_429_452_040_u128),
             access_list: AccessList::default(),
         };
 
@@ -805,7 +765,7 @@ mod tests {
             to: Some(token_address.to_string()),
             value: "0".to_string(), // No ETH transfer, just contract call
             data: contract_data,
-            gas_limit: Some(100000), // Higher gas limit for contract interaction
+            gas_limit: Some(100_000), // Higher gas limit for contract interaction
             gas_price: Some("20000000000".to_string()), // 20 gwei
             max_fee_per_gas: None,
             max_priority_fee_per_gas: None,
@@ -832,7 +792,7 @@ mod tests {
             gas_used > 21000,
             "Gas used should be greater than simple transfer"
         );
-        assert!(gas_used <= 100000, "Gas used should not exceed gas limit");
+        assert!(gas_used <= 100_000, "Gas used should not exceed gas limit");
 
         // Verify the receipt contains expected information
         assert!(
@@ -915,7 +875,7 @@ mod tests {
         let anvil = Anvil::new()
             .arg("--fork-url")
             .arg("https://reth-ethereum.ithaca.xyz/rpc")
-            .fork_block_number(23113920)
+            .fork_block_number(23_113_920)
             .try_spawn()
             .unwrap();
 
@@ -1076,7 +1036,7 @@ mod tests {
         let anvil = Anvil::new()
             .arg("--fork-url")
             .arg("https://reth-ethereum.ithaca.xyz/rpc")
-            .fork_block_number(23138386)
+            .fork_block_number(23_138_386)
             .try_spawn()
             .unwrap();
 
@@ -1166,7 +1126,7 @@ mod tests {
             to: Some(double_deposit_address.to_string()),
             value: total_value.to_string(),
             data: calldata,
-            gas_limit: Some(300000),
+            gas_limit: Some(300_000),
             gas_price: None, // 20 gwei
             max_fee_per_gas: Some("20000000000".to_string()),
             max_priority_fee_per_gas: Some("20000000000".to_string()),
@@ -1204,7 +1164,7 @@ mod tests {
             warn!("⚠️  Transaction reverted, but continuing to analyze events...");
         }
         assert!(gas_used > 0, "Gas used should be greater than 0");
-        assert!(gas_used <= 300000, "Gas used should not exceed gas limit");
+        assert!(gas_used <= 300_000, "Gas used should not exceed gas limit");
 
         // Verify transaction was successful
         assert!(receipt.status(), "Transaction should be successful");

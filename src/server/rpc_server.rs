@@ -31,10 +31,7 @@ fn handle_fee_estimation_response(
                 let error_details = summary.errors.join("; ");
                 let api_error = ApiError::with_details(
                     ApiErrorCode::FeeEstimationFailed,
-                    format!(
-                        "Failed to estimate fees for all L1 to L2 messages - {}",
-                        error_context
-                    ),
+                    format!("Failed to estimate fees for all L1 to L2 messages - {error_context}"),
                     error_details,
                 );
                 let response = ApiResponse::error(api_error);
@@ -49,13 +46,10 @@ fn handle_fee_estimation_response(
             }
         }
         Err(e) => {
-            error!("Fee estimation failed: {}", e);
+            error!("Fee estimation failed: {e}");
             let api_error = ApiError::with_details(
                 ApiErrorCode::FeeEstimationFailed,
-                format!(
-                    "Failed to estimate fees for L1 to L2 messages - {}",
-                    error_context
-                ),
+                format!("Failed to estimate fees for L1 to L2 messages - {error_context}"),
                 e.to_string(),
             );
             let response = ApiResponse::error(api_error);
@@ -71,8 +65,8 @@ fn parse_felt_from_value(
     value: &serde_json::Value,
     field_name: &str,
     index: usize,
-) -> Result<starknet::core::types::Felt> {
-    use starknet::core::types::Felt;
+) -> Result<starknet_rust::core::types::Felt> {
+    use starknet_rust::core::types::Felt;
 
     match value {
         serde_json::Value::String(s) => {
@@ -498,7 +492,7 @@ fn parse_unsigned_transaction_params(
 fn parse_l1_to_l2_message_params(
     params: &jsonrpsee::types::Params,
 ) -> Result<Vec<L1ToL2MessageSentEvent>> {
-    use starknet::core::types::EthAddress;
+    use starknet_rust::core::types::EthAddress;
 
     let params_value: serde_json::Value = params.parse()?;
 
@@ -557,7 +551,7 @@ fn parse_l1_to_l2_message_params(
         let mut payload = Vec::new();
         for (payload_index, payload_item) in payload_array.iter().enumerate() {
             let payload_felt =
-                parse_felt_from_value(payload_item, &format!("payload[{}]", payload_index), index)?;
+                parse_felt_from_value(payload_item, &format!("payload[{payload_index}]"), index)?;
             payload.push(payload_felt);
         }
 
@@ -577,7 +571,7 @@ mod tests {
     use super::*;
     use jsonrpsee::types::Params;
     use serde_json::json;
-    use starknet::core::types::{EthAddress, Felt};
+    use starknet_rust::core::types::{EthAddress, Felt};
 
     // Helper function to create Params with proper lifetime management
     fn create_params(value: serde_json::Value) -> Params<'static> {
@@ -925,8 +919,8 @@ mod tests {
     fn test_parse_l1_to_l2_message_params_with_integers() {
         let message = json!({
             "from_address": "0x8453FC6Cd1bCfE8D4dFC069C400B433054d47bDc",
-            "l2_address": 123456, // Integer instead of hex string
-            "selector": 987654, // Integer instead of hex string
+            "l2_address": 123_456, // Integer instead of hex string
+            "selector": 987_654, // Integer instead of hex string
             "payload": [42, 100, 200] // Integers instead of hex strings
         });
 
@@ -944,13 +938,25 @@ mod tests {
         let event = &events[0];
         assert_eq!(
             event.l2_address,
-            starknet::core::types::Felt::from(123456u64)
+            starknet_rust::core::types::Felt::from(123_456_u64)
         );
-        assert_eq!(event.selector, starknet::core::types::Felt::from(987654u64));
+        assert_eq!(
+            event.selector,
+            starknet_rust::core::types::Felt::from(987_654_u64)
+        );
         assert_eq!(event.payload.len(), 3);
-        assert_eq!(event.payload[0], starknet::core::types::Felt::from(42u64));
-        assert_eq!(event.payload[1], starknet::core::types::Felt::from(100u64));
-        assert_eq!(event.payload[2], starknet::core::types::Felt::from(200u64));
+        assert_eq!(
+            event.payload[0],
+            starknet_rust::core::types::Felt::from(42u64)
+        );
+        assert_eq!(
+            event.payload[1],
+            starknet_rust::core::types::Felt::from(100u64)
+        );
+        assert_eq!(
+            event.payload[2],
+            starknet_rust::core::types::Felt::from(200u64)
+        );
     }
 
     #[test]
@@ -958,7 +964,7 @@ mod tests {
         let message = json!({
             "from_address": "0x8453FC6Cd1bCfE8D4dFC069C400B433054d47bDc",
             "l2_address": "0x04c5772d1914fe6ce891b64eb35bf3522aeae1315647314aac58b01137607f3f", // Hex string
-            "selector": 987654, // Integer
+            "selector": 987_654, // Integer
             "payload": ["0x123", 456, "0x789"] // Mixed hex strings and integers
         });
 
@@ -974,16 +980,22 @@ mod tests {
         assert_eq!(events.len(), 1);
 
         let event = &events[0];
-        assert_eq!(event.selector, starknet::core::types::Felt::from(987654u64));
+        assert_eq!(
+            event.selector,
+            starknet_rust::core::types::Felt::from(987_654_u64)
+        );
         assert_eq!(event.payload.len(), 3);
         assert_eq!(
             event.payload[0],
-            starknet::core::types::Felt::from_hex("0x123").unwrap()
+            starknet_rust::core::types::Felt::from_hex("0x123").unwrap()
         );
-        assert_eq!(event.payload[1], starknet::core::types::Felt::from(456u64));
+        assert_eq!(
+            event.payload[1],
+            starknet_rust::core::types::Felt::from(456u64)
+        );
         assert_eq!(
             event.payload[2],
-            starknet::core::types::Felt::from_hex("0x789").unwrap()
+            starknet_rust::core::types::Felt::from_hex("0x789").unwrap()
         );
     }
 }

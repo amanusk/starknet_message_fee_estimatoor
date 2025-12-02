@@ -18,7 +18,7 @@ async fn main() -> Result<()> {
     // Initialize logging with configuration
     logging::init_logging(&settings.logging)?;
 
-    info!("Loaded configuration: {:?}", settings);
+    info!("Loaded configuration: {settings:?}");
 
     // Get server address
     let addr = settings.server_addr()?;
@@ -27,13 +27,13 @@ async fn main() -> Result<()> {
     let rpc_server =
         RpcServer::new_with_config(&settings.ethereum.endpoint, &settings.starknet.endpoint)?;
 
-    info!("Starting server on {}", addr);
+    info!("Starting server on {addr}");
 
     // Start server with graceful shutdown
     tokio::select! {
         result = rpc_server.start(addr) => {
             if let Err(e) = result {
-                error!("Server error: {}", e);
+                error!("Server error: {e}");
             }
         }
         _ = tokio::signal::ctrl_c() => {
