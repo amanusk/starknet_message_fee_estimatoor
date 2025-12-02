@@ -18,8 +18,6 @@ use serde_json::{json, Value};
 
 use starknet_rust::core::types::{EthAddress, Felt};
 
-/// Represents the result of a transaction simulation
-
 /// Unsigned transaction data structure for simulation with impersonation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnsignedTransactionData {
