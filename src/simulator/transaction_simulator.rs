@@ -1,7 +1,6 @@
 use eyre::{eyre, Report as ErrReport, Result};
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::str::FromStr;
 
 use alloy::{
@@ -20,37 +19,6 @@ use serde_json::{json, Value};
 use starknet_rust::core::types::{EthAddress, Felt};
 
 /// Represents the result of a transaction simulation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SimulationResult {
-    pub success: bool,
-    pub gas_used: u64,
-    pub return_data: Vec<u8>,
-    pub events: Vec<SimulationEvent>,
-    pub state_changes: HashMap<String, String>,
-    pub error_message: Option<String>,
-}
-
-/// Represents an event emitted during simulation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SimulationEvent {
-    pub address: String,
-    pub topics: Vec<String>,
-    pub data: Vec<u8>,
-}
-
-// SimulationError removed - using eyre::Result throughout
-
-/// Transaction data structure for simulation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransactionData {
-    pub from: String,
-    pub to: Option<String>,
-    pub value: String,
-    pub data: Vec<u8>,
-    pub gas_limit: u64,
-    pub gas_price: String,
-    pub nonce: u64,
-}
 
 /// Unsigned transaction data structure for simulation with impersonation
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -10,9 +10,6 @@ use crate::simulator::transaction_simulator::L1ToL2MessageSentEvent;
 /// Mainnet RPC URL for Starknet
 pub const MAINNET_RPC_URL: &str = "https://pathfinder.rpc.mainnet.starknet.rs/rpc/v0_9";
 
-/// Testnet (Sepolia) RPC URL for Starknet
-pub const TESTNET_RPC_URL: &str = "https://pathfinder.rpc.sepolia.starknet.rs/rpc/v0_9";
-
 /// Configuration for the Starknet fee estimator
 #[derive(Debug, Clone)]
 pub struct StarknetFeeEstimatorConfig {
@@ -198,6 +195,7 @@ mod tests {
     use super::*;
     use log::{debug, error, info};
     use starknet_rust::core::types::Felt;
+    pub const TESTNET_RPC_URL: &str = "https://pathfinder.rpc.sepolia.starknet.rs/rpc/v0_9";
 
     #[test]
     fn test_fee_estimator_creation() {
