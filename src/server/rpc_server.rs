@@ -31,10 +31,7 @@ fn handle_fee_estimation_response(
                 let error_details = summary.errors.join("; ");
                 let api_error = ApiError::with_details(
                     ApiErrorCode::FeeEstimationFailed,
-                    format!(
-                        "Failed to estimate fees for all L1 to L2 messages - {}",
-                        error_context
-                    ),
+                    format!("Failed to estimate fees for all L1 to L2 messages - {error_context}"),
                     error_details,
                 );
                 let response = ApiResponse::error(api_error);
@@ -49,13 +46,10 @@ fn handle_fee_estimation_response(
             }
         }
         Err(e) => {
-            error!("Fee estimation failed: {}", e);
+            error!("Fee estimation failed: {e}");
             let api_error = ApiError::with_details(
                 ApiErrorCode::FeeEstimationFailed,
-                format!(
-                    "Failed to estimate fees for L1 to L2 messages - {}",
-                    error_context
-                ),
+                format!("Failed to estimate fees for L1 to L2 messages - {error_context}"),
                 e.to_string(),
             );
             let response = ApiResponse::error(api_error);
@@ -557,7 +551,7 @@ fn parse_l1_to_l2_message_params(
         let mut payload = Vec::new();
         for (payload_index, payload_item) in payload_array.iter().enumerate() {
             let payload_felt =
-                parse_felt_from_value(payload_item, &format!("payload[{}]", payload_index), index)?;
+                parse_felt_from_value(payload_item, &format!("payload[{payload_index}]"), index)?;
             payload.push(payload_felt);
         }
 
@@ -925,8 +919,8 @@ mod tests {
     fn test_parse_l1_to_l2_message_params_with_integers() {
         let message = json!({
             "from_address": "0x8453FC6Cd1bCfE8D4dFC069C400B433054d47bDc",
-            "l2_address": 123456, // Integer instead of hex string
-            "selector": 987654, // Integer instead of hex string
+            "l2_address": 123_456, // Integer instead of hex string
+            "selector": 987_654, // Integer instead of hex string
             "payload": [42, 100, 200] // Integers instead of hex strings
         });
 
@@ -944,11 +938,11 @@ mod tests {
         let event = &events[0];
         assert_eq!(
             event.l2_address,
-            starknet_rust::core::types::Felt::from(123456u64)
+            starknet_rust::core::types::Felt::from(123_456_u64)
         );
         assert_eq!(
             event.selector,
-            starknet_rust::core::types::Felt::from(987654u64)
+            starknet_rust::core::types::Felt::from(987_654_u64)
         );
         assert_eq!(event.payload.len(), 3);
         assert_eq!(
@@ -970,7 +964,7 @@ mod tests {
         let message = json!({
             "from_address": "0x8453FC6Cd1bCfE8D4dFC069C400B433054d47bDc",
             "l2_address": "0x04c5772d1914fe6ce891b64eb35bf3522aeae1315647314aac58b01137607f3f", // Hex string
-            "selector": 987654, // Integer
+            "selector": 987_654, // Integer
             "payload": ["0x123", 456, "0x789"] // Mixed hex strings and integers
         });
 
@@ -988,7 +982,7 @@ mod tests {
         let event = &events[0];
         assert_eq!(
             event.selector,
-            starknet_rust::core::types::Felt::from(987654u64)
+            starknet_rust::core::types::Felt::from(987_654_u64)
         );
         assert_eq!(event.payload.len(), 3);
         assert_eq!(

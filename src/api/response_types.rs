@@ -16,7 +16,7 @@ pub struct ApiResponse {
 impl ApiResponse {
     /// Create a successful response
     #[must_use]
-    pub fn success(summary: FeeEstimationSummary) -> Self {
+    pub const fn success(summary: FeeEstimationSummary) -> Self {
         Self {
             result: Some(summary),
             error: None,
@@ -25,7 +25,7 @@ impl ApiResponse {
 
     /// Create an error response
     #[must_use]
-    pub fn error(error: ApiError) -> Self {
+    pub const fn error(error: ApiError) -> Self {
         Self {
             result: None,
             error: Some(error),
@@ -110,15 +110,15 @@ pub enum ApiErrorCode {
 impl ApiErrorCode {
     /// Get the default message for each error code
     #[must_use]
-    pub fn default_message(&self) -> &'static str {
+    pub const fn default_message(&self) -> &'static str {
         match self {
-            ApiErrorCode::InvalidInputFormat => "Invalid input format",
-            ApiErrorCode::InvalidUnsignedTransaction => "Invalid unsigned transaction",
-            ApiErrorCode::InvalidSignedTransaction => "Invalid signed transaction",
-            ApiErrorCode::TransactionSimulationFailed => "Failed to simulate transaction",
-            ApiErrorCode::FeeEstimationFailed => "Failed to estimate fee",
-            ApiErrorCode::RateLimitExceeded => "Rate limit exceeded",
-            ApiErrorCode::InternalError => "Internal server error",
+            Self::InvalidInputFormat => "Invalid input format",
+            Self::InvalidUnsignedTransaction => "Invalid unsigned transaction",
+            Self::InvalidSignedTransaction => "Invalid signed transaction",
+            Self::TransactionSimulationFailed => "Failed to simulate transaction",
+            Self::FeeEstimationFailed => "Failed to estimate fee",
+            Self::RateLimitExceeded => "Rate limit exceeded",
+            Self::InternalError => "Internal server error",
         }
     }
 }
@@ -141,20 +141,20 @@ mod tests {
             total_messages: 1,
             successful_estimates: 1,
             failed_estimates: 0,
-            total_fee_wei: 1000000000000000000,
+            total_fee_wei: 1_000_000_000_000_000_000,
             total_fee_eth: 1.0,
             individual_estimates: vec![MessageFeeEstimate {
                 l2_address: Felt::ONE,
                 selector: Felt::TWO,
                 gas_consumed: 21000,
-                gas_price: 20000000000,
-                overall_fee: 1000000000000000000,
+                gas_price: 20_000_000_000,
+                overall_fee: 1_000_000_000_000_000_000,
                 unit: "WEI".to_string(),
             }],
             errors: vec![],
         };
 
-        let response = ApiResponse::success(summary.clone());
+        let response = ApiResponse::success(summary);
 
         assert!(response.result.is_some());
         assert!(response.error.is_none());
@@ -255,7 +255,7 @@ mod tests {
             total_messages: 1,
             successful_estimates: 1,
             failed_estimates: 0,
-            total_fee_wei: 1000000000000000000,
+            total_fee_wei: 1_000_000_000_000_000_000,
             total_fee_eth: 1.0,
             individual_estimates: vec![],
             errors: vec![],
