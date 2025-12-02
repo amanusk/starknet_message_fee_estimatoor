@@ -133,7 +133,7 @@ impl From<ApiErrorCode> for ApiError {
 mod tests {
     use super::*;
     use crate::fee_estimator::{FeeEstimationSummary, MessageFeeEstimate};
-    use starknet::core::types::Felt;
+    use starknet_rust::core::types::Felt;
 
     #[test]
     fn test_api_response_success() {

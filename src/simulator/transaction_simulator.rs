@@ -17,7 +17,7 @@ use alloy::{
 };
 use serde_json::{json, Value};
 
-use starknet::core::types::{EthAddress, Felt};
+use starknet_rust::core::types::{EthAddress, Felt};
 
 /// Represents the result of a transaction simulation
 #[derive(Debug, Clone, Serialize, Deserialize)]

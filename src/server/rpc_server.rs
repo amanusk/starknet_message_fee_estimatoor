@@ -71,8 +71,8 @@ fn parse_felt_from_value(
     value: &serde_json::Value,
     field_name: &str,
     index: usize,
-) -> Result<starknet::core::types::Felt> {
-    use starknet::core::types::Felt;
+) -> Result<starknet_rust::core::types::Felt> {
+    use starknet_rust::core::types::Felt;
 
     match value {
         serde_json::Value::String(s) => {
@@ -498,7 +498,7 @@ fn parse_unsigned_transaction_params(
 fn parse_l1_to_l2_message_params(
     params: &jsonrpsee::types::Params,
 ) -> Result<Vec<L1ToL2MessageSentEvent>> {
-    use starknet::core::types::EthAddress;
+    use starknet_rust::core::types::EthAddress;
 
     let params_value: serde_json::Value = params.parse()?;
 
@@ -577,7 +577,7 @@ mod tests {
     use super::*;
     use jsonrpsee::types::Params;
     use serde_json::json;
-    use starknet::core::types::{EthAddress, Felt};
+    use starknet_rust::core::types::{EthAddress, Felt};
 
     // Helper function to create Params with proper lifetime management
     fn create_params(value: serde_json::Value) -> Params<'static> {
@@ -944,13 +944,25 @@ mod tests {
         let event = &events[0];
         assert_eq!(
             event.l2_address,
-            starknet::core::types::Felt::from(123456u64)
+            starknet_rust::core::types::Felt::from(123456u64)
         );
-        assert_eq!(event.selector, starknet::core::types::Felt::from(987654u64));
+        assert_eq!(
+            event.selector,
+            starknet_rust::core::types::Felt::from(987654u64)
+        );
         assert_eq!(event.payload.len(), 3);
-        assert_eq!(event.payload[0], starknet::core::types::Felt::from(42u64));
-        assert_eq!(event.payload[1], starknet::core::types::Felt::from(100u64));
-        assert_eq!(event.payload[2], starknet::core::types::Felt::from(200u64));
+        assert_eq!(
+            event.payload[0],
+            starknet_rust::core::types::Felt::from(42u64)
+        );
+        assert_eq!(
+            event.payload[1],
+            starknet_rust::core::types::Felt::from(100u64)
+        );
+        assert_eq!(
+            event.payload[2],
+            starknet_rust::core::types::Felt::from(200u64)
+        );
     }
 
     #[test]
@@ -974,16 +986,22 @@ mod tests {
         assert_eq!(events.len(), 1);
 
         let event = &events[0];
-        assert_eq!(event.selector, starknet::core::types::Felt::from(987654u64));
+        assert_eq!(
+            event.selector,
+            starknet_rust::core::types::Felt::from(987654u64)
+        );
         assert_eq!(event.payload.len(), 3);
         assert_eq!(
             event.payload[0],
-            starknet::core::types::Felt::from_hex("0x123").unwrap()
+            starknet_rust::core::types::Felt::from_hex("0x123").unwrap()
         );
-        assert_eq!(event.payload[1], starknet::core::types::Felt::from(456u64));
+        assert_eq!(
+            event.payload[1],
+            starknet_rust::core::types::Felt::from(456u64)
+        );
         assert_eq!(
             event.payload[2],
-            starknet::core::types::Felt::from_hex("0x789").unwrap()
+            starknet_rust::core::types::Felt::from_hex("0x789").unwrap()
         );
     }
 }

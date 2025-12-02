@@ -93,7 +93,7 @@ async fn start_test_server() -> SocketAddr {
 
     // Create server with test configuration pointing to our Anvil node
     let l1_rpc_url = format!("http://{}:{}", ANVIL_HOST, ANVIL_PORT);
-    let starknet_rpc_url = "https://pathfinder.rpc.sepolia.starknet.rs/rpc/v0_8".to_string();
+    let starknet_rpc_url = "https://pathfinder.rpc.sepolia.starknet.rs/rpc/v0_9".to_string();
 
     let server = RpcServer::new_with_config(&l1_rpc_url, &starknet_rpc_url)
         .expect("Failed to create RPC server");

@@ -1,8 +1,8 @@
 use eyre::{eyre, Result};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
-use starknet::core::types::{BlockId, BlockTag, Felt, MsgFromL1};
-use starknet::providers::{jsonrpc::HttpTransport, JsonRpcClient, Provider};
+use starknet_rust::core::types::{BlockId, BlockTag, Felt, MsgFromL1};
+use starknet_rust::providers::{jsonrpc::HttpTransport, JsonRpcClient, Provider};
 use std::sync::Arc;
 
 use crate::simulator::transaction_simulator::L1ToL2MessageSentEvent;
@@ -118,7 +118,7 @@ impl StarknetFeeEstimator {
             gas_consumed: fee_estimate.l1_gas_consumed,
             gas_price: fee_estimate.l1_gas_price,
             overall_fee: fee_estimate.overall_fee,
-            unit: format!("{:?}", fee_estimate.unit),
+            unit: "WEI".to_string(),
         })
     }
 
@@ -192,7 +192,7 @@ impl StarknetFeeEstimator {
 mod tests {
     use super::*;
     use log::{debug, error, info};
-    use starknet::core::types::Felt;
+    use starknet_rust::core::types::Felt;
 
     #[test]
     fn test_fee_estimator_creation() {
@@ -249,7 +249,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_single_message_fee_estimation() {
-        use starknet::core::types::{EthAddress, Felt};
+        use starknet_rust::core::types::{EthAddress, Felt};
         use std::str::FromStr;
 
         // Create fee estimator with Starknet mainnet endpoint
@@ -299,7 +299,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_double_deposit_fee_estimation() {
-        use starknet::core::types::{EthAddress, Felt};
+        use starknet_rust::core::types::{EthAddress, Felt};
         use std::str::FromStr;
 
         // Create fee estimator with Starknet mainnet endpoint
@@ -462,11 +462,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_jsonrpc_estimate_message_fee_sanity_check() {
-        use starknet::core::types::EthAddress;
-        use starknet::providers::Url;
+        use starknet_rust::core::types::EthAddress;
+        use starknet_rust::providers::Url;
 
         let rpc_url = std::env::var("STARKNET_RPC")
-            .unwrap_or_else(|_| "https://pathfinder.rpc.sepolia.starknet.rs/rpc/v0_8".into());
+            .unwrap_or_else(|_| "https://pathfinder.rpc.sepolia.starknet.rs/rpc/v0_9".into());
         let rpc_client = JsonRpcClient::new(HttpTransport::new(Url::parse(&rpc_url).unwrap()));
 
         let estimate = rpc_client
